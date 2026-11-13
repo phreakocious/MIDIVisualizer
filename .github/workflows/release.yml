@@ -5,6 +5,10 @@ on:
     types: 
       - published
 
+# Uploading release assets needs write access; this repo's token defaults to read.
+permissions:
+  contents: write
+
 jobs:
   build:
 
