@@ -72,6 +72,13 @@ constexpr const char* s_show_blur_dsc 						= "Should the blur be visible";
 constexpr const char* s_show_keyboard_key 					= "show-keyboard";
 constexpr const char* s_show_keyboard_dsc 					= "Should the keyboard be shown";
 
+constexpr const char* s_trail_3d_key 						= "trail-3d";
+constexpr const char* s_trail_3d_dsc 						= "Lay the scene on a floor seen in perspective (test)";
+constexpr const char* s_trail_tilt_key 						= "trail-tilt";
+constexpr const char* s_trail_tilt_dsc 						= "Camera angle above the floor in degrees, 90 looks straight down";
+constexpr const char* s_trail_length_key 					= "trail-length";
+constexpr const char* s_trail_length_dsc 					= "Length of the floor, 1 matches the flat view";
+
 constexpr const char* s_show_score_key 						= "show-score";
 constexpr const char* s_show_score_dsc 						= "Should the score (lines, numbers) be shown";
 

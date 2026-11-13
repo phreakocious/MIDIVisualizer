@@ -67,6 +67,7 @@ Viewer::Viewer(const Configuration& config) :
 	_blurringScreen.init(_particlesFramebuffer->textureId(), "particlesblur_frag");
 	_fxaa.init("fxaa_frag");
 	_passthrough.init("screenquad_frag");
+	_tilt.init("tilt_frag", "tilt_vert");
 
 	// Create the layers.
 	//_layers[Layer::BGCOLOR].type = Layer::BGCOLOR;
@@ -271,6 +272,52 @@ void Viewer::drawScene(bool transparentBG){
 	}
 
 	_renderFramebuffer->unbind();
+
+	// shortcut: test of the 3D look, the flat frame laid on a floor in perspective; no FXAA on this path.
+	if(_state.trail3D){
+		// Mipmaps and anisotropic filtering keep the far end from shimmering.
+		glBindTexture(GL_TEXTURE_2D, _renderFramebuffer->textureId());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		glTexParameterf(GL_TEXTURE_2D, 0x84FE /* GL_TEXTURE_MAX_ANISOTROPY_EXT */, 16.0f);
+		glGenerateMipmap(GL_TEXTURE_2D);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		const float aspect = float(_finalFramebuffer->_width) / float(_finalFramebuffer->_height);
+		const float tilt = glm::radians(_state.trailTilt);
+		const float halfFov = glm::radians(30.0f);
+		// Camera 2 units from the near edge, on the ray that puts that edge at the bottom of the frame and full width.
+		// At 90 degrees and length 1 this reproduces the flat view.
+		const glm::vec3 eye(0.0f, 2.0f * std::sin(tilt + halfFov), 2.0f * std::cos(tilt + halfFov));
+		const glm::vec3 dir(0.0f, -std::sin(tilt), -std::cos(tilt));
+		const glm::vec3 up(0.0f, std::cos(tilt), -std::sin(tilt));
+		const glm::mat4 mvp = glm::perspective(2.0f * halfFov, aspect, 0.05f, 100.0f) * glm::lookAt(eye, eye + dir, up);
+		const glm::vec4 fog = transparentBG ? glm::vec4(0.0f) : glm::vec4(_state.background.color, 1.0f);
+
+		_finalFramebuffer->bind();
+		glViewport(0, 0, _finalFramebuffer->_width, _finalFramebuffer->_height);
+		glClearColor(fog[0], fog[1], fog[2], fog[3]);
+		glClear(GL_COLOR_BUFFER_BIT);
+		_tilt.program().use();
+		_tilt.program().uniform("mvp", mvp);
+		_tilt.program().uniform("aspect", aspect);
+		_tilt.program().uniform("fogColor", fog);
+		// Two strips: the keyboard at its flat size, then the notes stretched by the floor length.
+		const float kh = _state.keyboard.size;
+		const float kz = -2.0f * kh;
+		_tilt.program().uniform("rangeV", glm::vec2(0.0f, kh));
+		_tilt.program().uniform("rangeZ", glm::vec2(0.0f, kz));
+		_tilt.draw(_renderFramebuffer->textureId(), 0.0f);
+		_tilt.program().use();
+		_tilt.program().uniform("rangeV", glm::vec2(kh, 1.0f));
+		_tilt.program().uniform("rangeZ", glm::vec2(kz, kz - 2.0f * (1.0f - kh) * _state.trailLength));
+		_tilt.draw(_renderFramebuffer->textureId(), 0.0f);
+		_finalFramebuffer->unbind();
+		return;
+	}
+	// The 3D test path leaves a mipmap filter behind; a resize would make the texture incomplete.
+	glBindTexture(GL_TEXTURE_2D, _renderFramebuffer->textureId());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glBindTexture(GL_TEXTURE_2D, 0);
 
 	// Apply fxaa.
 	if(_state.applyAA){
@@ -596,6 +643,13 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 			} else {
 				ImGui::helpTooltip(s_loop_dsc);
 			}
+		}
+
+		if(ImGui::CollapsingHeader("3D view (test)##HEADER")){
+			ImGui::Checkbox("3D view", &_state.trail3D);
+			ImGui::helpTooltip(s_trail_3d_dsc);
+			ImGui::SliderFloat("Camera angle", &_state.trailTilt, 20.0f, 90.0f, "%.0f deg");
+			ImGui::SliderFloat("Note distance", &_state.trailLength, 1.0f, 8.0f, "%.1fx");
 		}
 
 		if(ImGui::CollapsingHeader("Notes##HEADER")){
@@ -2194,6 +2248,7 @@ void Viewer::clean() {
 	_passthrough.clean();
 	_backgroundTexture.clean();
 	_fxaa.clean();
+	_tilt.clean();
 	_particlesFramebuffer->clean();
 	_blurFramebuffer0->clean();
 	_blurFramebuffer1->clean();

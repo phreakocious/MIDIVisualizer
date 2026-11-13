@@ -191,6 +191,9 @@ void State::defineOptions(){
 	_sharedInfos[s_show_flashes_key] 	= {Category::EFFECTS, s_show_flashes_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_blur_key] 		= {Category::EFFECTS, s_show_blur_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_keyboard_key] 	= {Category::EFFECTS, s_show_keyboard_dsc, Type::BOOLEAN};
+	_sharedInfos[s_trail_3d_key] 		= {Category::EFFECTS, s_trail_3d_dsc, Type::BOOLEAN};
+	_sharedInfos[s_trail_tilt_key] 		= {Category::EFFECTS, s_trail_tilt_dsc, Type::FLOAT, {20.0f, 90.0f}};
+	_sharedInfos[s_trail_length_key] 	= {Category::EFFECTS, s_trail_length_dsc, Type::FLOAT, {1.0f, 8.0f}};
 	_sharedInfos[s_show_score_key] 		= {Category::EFFECTS, s_show_score_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_notes_key] 		= {Category::EFFECTS, s_show_notes_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_pedal_key] 		= {Category::EFFECTS, s_show_pedal_dsc, Type::BOOLEAN};
@@ -381,6 +384,9 @@ void State::updateOptions(){
 	_boolInfos[s_show_vert_lines_key] = &score.vLines;
 	_boolInfos[s_show_numbers_key] = &score.digits;
 	_boolInfos[s_show_keyboard_key] = &showKeyboard;
+	_boolInfos[s_trail_3d_key] = &trail3D;
+	_floatInfos[s_trail_tilt_key] = &trailTilt;
+	_floatInfos[s_trail_length_key] = &trailLength;
 	_boolInfos[s_bg_img_behind_keyboard_key] = &background.imageBehindKeyboard;
 	_boolInfos[s_keyboard_highlight_key] = &keyboard.highlightKeys;
 	_boolInfos[s_keyboard_custom_colors_key] = &keyboard.customKeyColors;
@@ -842,6 +848,9 @@ void State::reset(){
 	showNotes = true;
 	showScore = true;
 	showKeyboard = true;
+	trail3D = false;
+	trailTilt = 45.0f;
+	trailLength = 4.0f;
 	flashes.size = 1.0f;
 	flashes.velocityStrength = 1.0f;
 	flashes.haloIntensity = 1.0f;

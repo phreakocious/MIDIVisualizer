@@ -213,6 +213,9 @@ public:
 	bool showNotes;
 	bool showScore;
 	bool showKeyboard;
+	bool trail3D;
+	float trailTilt;
+	float trailLength;
 	bool perSetColors;
 	bool showPedal;
 	bool showWave;
