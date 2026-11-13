@@ -36,6 +36,9 @@ public:
 
 	const int & tracksCount() const { return _trackCount; }
 
+	// True when all notes share one velocity (or there are none): such a file carries no dynamics.
+	bool singleVelocity() const { return _minVelocity >= _maxVelocity; }
+
 private:
 
 	void populateTemposAndSignature();
@@ -51,6 +54,8 @@ private:
 	double _duration = 0.0;
 	int _notesCount = 0;
 	int _trackCount = 0;
+	short _minVelocity = 127;
+	short _maxVelocity = 0;
 
 	std::vector<MIDITrack> _tracks;
 	std::vector<MIDITempo> _tempos;

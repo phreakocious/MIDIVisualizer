@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <array>
+#include <cmath>
 
 struct SetOptions;
 
@@ -126,6 +127,13 @@ inline double computeUnitsDuration(int tempo, size_t time, uint16_t unitsPerQuar
 template <typename T>
 T clamp(T x, T a, T b) {
 	return (std::min)((std::max)(x, a), b);
+}
+
+// Visual gain for a note velocity: 1.0 at velocity 80 (today's look), below for softer, above for louder.
+inline float velocityGain(int velocity){
+	const float v = float(clamp(velocity, 1, 127));
+	// The 0.25 floor keeps the softest notes visible.
+	return 0.25f + 0.75f * (v / 80.0f);
 }
 
 
