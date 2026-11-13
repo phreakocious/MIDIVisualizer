@@ -63,6 +63,7 @@ private:
 
 	GLuint _notesDataBuffer;
 	GLuint _keysDataBuffer;
+	GLuint _keysGainBuffer;
 	GLuint _quadVertices;
 	GLuint _quadIndices;
 	GLuint _waveVertices;

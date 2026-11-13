@@ -29,6 +29,16 @@ public:
 
 	double secondsPerMeasure() const override;
 
+	double tempoBPM() const override;
+
+	void setTempo(double bpm);
+
+	glm::ivec2 signature() const { return glm::ivec2(int(_signatureNum), int(_signatureDenom)); }
+
+	void setSignature(int numerator, int denominator);
+
+	double gridOrigin() const override { return _gridOrigin; }
+
 	int notesCount() const override;
 
 	int tracksCount() const override;
@@ -64,6 +74,7 @@ private:
 	double _signatureNum = 4.0;
 	double _signatureDenom = 4.0;
 	double _secondsPerMeasure = 1.0;
+	double _gridOrigin = 0.0;
 
 	int _notesCount = 0;
 	int _tempo = 500000;

@@ -3,6 +3,7 @@
 layout(location = 0) in vec2 v;
 layout(location = 1) in vec4 id; //note id, start, duration, is minor
 layout(location = 2) in float channel; //note id, start, duration, is minor
+layout(location = 3) in float gain; // velocity gain, 1 is neutral
 
 uniform float time;
 uniform float mainSpeed;
@@ -24,6 +25,7 @@ out INTERFACE {
 	flat vec2 noteCorner;
 	float isMinor;
 	float channel;
+	float gain;
 } Out;
 
 #define MAJOR_COUNT 75
@@ -67,6 +69,7 @@ void main(){
 	Out.uv = Out.noteSize * v;
 	Out.isMinor = id.w;
 	Out.channel = channel;
+	Out.gain = gain;
 
 	// Output position.
 	gl_Position = vec4(flipIfNeeded(Out.noteSize * v + noteShift), 0.0 , 1.0);

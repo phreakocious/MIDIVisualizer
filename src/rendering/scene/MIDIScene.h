@@ -24,6 +24,7 @@ public:
 		float duration = 0.0f;
 		float start = 1000000.0f;
 		float elapsed = 0.0f;
+		float gain = 1.0f; ///< Velocity gain of the note that started it.
 	};
 
 	struct GPUNote {
@@ -32,6 +33,7 @@ public:
 		float duration = 0.0f;
 		float isMinor = 0.0f;
 		float set = 0.0f;
+		float gain = 1.0f; ///< Velocity gain, 1 is neutral.
 	};
 
 
@@ -49,6 +51,10 @@ public:
 
 	virtual double secondsPerMeasure() const;
 
+	virtual double tempoBPM() const;
+
+	virtual double gridOrigin() const;
+
 	virtual int notesCount() const;
 
 	virtual int tracksCount() const;
@@ -65,6 +71,8 @@ public:
 
 	const std::array<int, 128>& getActiveKeys() const { return _actives; }
 
+	const std::array<float, 128>& getActiveGains() const { return _activeGains; }
+
 	const std::vector<Particles>& getParticles() const { return _particles; }
 
 	const std::vector<GPUNote>& getNotes() const { return _notes; };
@@ -79,6 +87,7 @@ protected:
 
 	std::vector<GPUNote> _notes;
 	std::array<int, 128> _actives;
+	std::array<float, 128> _activeGains; ///< Velocity gain of the note on each key.
 	std::vector<Particles> _particles;
 	Pedals _pedals;
 	int _effectiveNotesCount = 0;

@@ -50,6 +50,11 @@ Configuration::Configuration(const std::string& path, const std::vector<std::str
 
 	// Merge both: the command line has priority over the file.
 	_args = argsFromFile;
+	// A file or device given on the command line replaces the remembered one, else the device would win at startup.
+	if(argsFromCommand.count("midi") > 0 || argsFromCommand.count("device") > 0){
+		_args.erase("midi");
+		_args.erase("device");
+	}
 	for(const auto& arg : argsFromCommand){
 		_args[arg.first] = arg.second;
 	}

@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ master ]
+  pull_request:
 
 jobs:
   build:
@@ -15,7 +16,7 @@ jobs:
             cmake-opts: 
           - os: windows-2025
             cmake-opts: -A x64
-          - os: macos-15
+          - os: macos-15-intel
             cmake-opts: -G Xcode
     
     runs-on: ${{ matrix.os }}

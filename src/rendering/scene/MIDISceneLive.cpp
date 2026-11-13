@@ -102,6 +102,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 			particle.note = -1;
 			particle.set = -1;
 			particle.duration = particle.start = particle.elapsed = 0.0f;
+			particle.gain = 1.0f;
 		}
 	}
 
@@ -165,6 +166,10 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 
 			// If this is an on event with positive velocity, start a new note.
 			if(type == libremidi::message_type::NOTE_ON && velocity > 0){
+				// The bar grid, and a saved recording, start on the first note.
+				if(_notesCount == 0){
+					_gridOrigin = time;
+				}
 
 				const int index = _notesCount % MAX_NOTES_IN_FLIGHT;
 				// Get new note.
@@ -172,6 +177,8 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 				newNote.start = float(time);
 				newNote.duration = 0.0f;
 				newNote.note = note;
+				newNote.gain = velocityGain(velocity);
+				_activeGains[note] = effectGain(newNote.gain);
 				// Save the original channel.
 				_notesInfos[index].channel = message.get_channel();
 				// Compute set according to current setting.
@@ -204,6 +211,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 						particle.note = note;
 						particle.set = int(newNote.set);
 						particle.elapsed = 0.0f;
+						particle.gain = effectGain(newNote.gain);
 						break;
 					}
 				}
@@ -290,6 +298,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 		// Update for notes currently playins.
 		if(note.start <= time && note.start+note.duration >= time){
 			_actives[noteId.note] = int(note.set);
+			_activeGains[noteId.note] = effectGain(note.gain);
 		}
 		// Detect notes that started at this frame.
 		if(note.start > _previousTime && note.start <= time){
@@ -302,6 +311,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 					particle.note = noteId.note;
 					particle.set = int(note.set);
 					particle.elapsed = 0.0f;
+					particle.gain = effectGain(note.gain);
 					break;
 				}
 			}
@@ -326,6 +336,27 @@ double MIDISceneLive::duration() const {
 
 double MIDISceneLive::secondsPerMeasure() const {
 	return _secondsPerMeasure;
+}
+
+double MIDISceneLive::tempoBPM() const {
+	return 60000000.0 / double(_tempo);
+}
+
+void MIDISceneLive::setTempo(double bpm){
+	// Bounds keep the microseconds per quarter note inside the 24 bits a tempo event holds.
+	_tempo = int(std::round(60000000.0 / clamp(bpm, 10.0, 1000.0)));
+	_secondsPerMeasure = computeMeasureDuration(_tempo, _signatureNum / _signatureDenom);
+}
+
+void MIDISceneLive::setSignature(int numerator, int denominator){
+	// Round the denominator up to a power of two, as libremidi does when saving.
+	int denom = 1;
+	while(denom < clamp(denominator, 1, 32)){
+		denom <<= 1;
+	}
+	_signatureNum = double(clamp(numerator, 1, 32));
+	_signatureDenom = double(denom);
+	_secondsPerMeasure = computeMeasureDuration(_tempo, _signatureNum / _signatureDenom);
 }
 
 int MIDISceneLive::notesCount() const {
@@ -358,13 +389,15 @@ void MIDISceneLive::save(std::ofstream& file) const {
 	});
 
 	// For each frame, update all messages timestamp.
-	double currentTime = 0.0;
+	// Bar 1 of the file is the grid origin; earlier messages (a pedal pressed first) land on it.
+	double currentTime = _gridOrigin;
 
 	for(MIDIFrame& frame : allMessages){
 		// Skip empty frames (should not exist), don't udpate the timing.
 		if(frame.messages.empty()){
 			continue;
 		}
+		frame.timestamp = (std::max)(frame.timestamp, _gridOrigin);
 		// First message should have a real delta to the last existing message.
 		frame.messages[0].timestamp = frame.timestamp - currentTime;
 		// All others are 0 as they happen at the same time.

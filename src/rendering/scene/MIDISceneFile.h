@@ -24,6 +24,8 @@ public:
 
 	double secondsPerMeasure() const override;
 
+	double tempoBPM() const override;
+
 	int notesCount() const override;
 	
 	int tracksCount() const override;
@@ -35,6 +37,8 @@ public:
 	const std::string& filePath() const;
 
 private:
+
+	float gainFor(short velocity) const;
 
 	MIDIFile _midiFile;
 	std::string _filePath;

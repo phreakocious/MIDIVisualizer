@@ -115,6 +115,8 @@ MIDIFile::MIDIFile(const std::string & filePath){
 		track.getNotes(notes, NoteType::ALL, noFilter);
 		for(const auto & note : notes){
 			_duration = (std::max)(_duration, note.start + note.duration);
+			_minVelocity = (std::min)(_minVelocity, note.velocity);
+			_maxVelocity = (std::max)(_maxVelocity, note.velocity);
 		}
 		_notesCount += int(notes.size());
 	}

@@ -7,6 +7,7 @@ in INTERFACE {
 	flat vec2 noteCorner;
 	float isMinor;
 	float channel;
+	float gain;
 } In;
 
 uniform vec3 baseColor[SETS_COUNT];
@@ -20,6 +21,7 @@ uniform float fadeOut;
 uniform float edgeWidth;
 uniform float edgeBrightness;
 uniform float cornerRadius;
+uniform float velocityStrength;
 uniform bool horizontalMode;
 uniform bool reverseMode;
 
@@ -80,6 +82,10 @@ void main(){
 	// Fragment color.
 	int cid = int(In.channel);
 	fragColor.rgb = tinting * colorScale * mix(baseColor[cid], minorColor[cid], In.isMinor);
+	// Velocity: softer notes dim, louder ones brighten and lean toward white, about halfway at velocity 127.
+	float gain = mix(1.0, In.gain, velocityStrength);
+	fragColor.rgb *= gain;
+	fragColor.rgb = mix(fragColor.rgb, vec3(1.0), clamp((gain - 1.0) * 1.15, 0.0, 0.5));
 
 	// Apply scaling factor to edge.
 	float deltaPix = fwidth(In.uv.x) * 4.0;

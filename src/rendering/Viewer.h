@@ -153,6 +153,8 @@ private:
 	
 	void reset();
 
+	void setPlaybackSpeed(float speed, float currentTime);
+
 	void startRecording();
 
 	void updateSizes();
@@ -195,6 +197,7 @@ private:
 	ScreenQuad _passthrough;
 	ScreenQuad _backgroundTexture;
 	ScreenQuad _fxaa;
+	ScreenQuad _tilt;
 
 	glm::ivec2 _windowSize;
 	glm::ivec2 _backbufferSize;

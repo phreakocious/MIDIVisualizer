@@ -17,6 +17,7 @@ MIDIScene::~MIDIScene(){}
 MIDIScene::MIDIScene(){
 	// Prepare actives notes array.
 	_actives.fill(-1);
+	_activeGains.fill(1.0f);
 	// Particle systems pool.
 	_particles = std::vector<Particles>(256);
 	_notes = {GPUNote()};
@@ -27,6 +28,7 @@ void MIDIScene::resetParticles() {
 		particle.note = -1;
 		particle.set = -1;
 		particle.duration = particle.start = particle.elapsed = 0.0f;
+		particle.gain = 1.0f;
 	}
 }
 
@@ -45,6 +47,14 @@ double MIDIScene::duration() const {
 
 double MIDIScene::secondsPerMeasure() const {
 	return 1.0;
+}
+
+double MIDIScene::tempoBPM() const {
+	return 120.0;
+}
+
+double MIDIScene::gridOrigin() const {
+	return 0.0;
 }
 
 int MIDIScene::notesCount() const {

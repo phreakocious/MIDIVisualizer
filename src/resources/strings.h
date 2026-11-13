@@ -72,6 +72,13 @@ constexpr const char* s_show_blur_dsc 						= "Should the blur be visible";
 constexpr const char* s_show_keyboard_key 					= "show-keyboard";
 constexpr const char* s_show_keyboard_dsc 					= "Should the keyboard be shown";
 
+constexpr const char* s_trail_3d_key 						= "trail-3d";
+constexpr const char* s_trail_3d_dsc 						= "Lay the scene on a floor seen in perspective (test)";
+constexpr const char* s_trail_tilt_key 						= "trail-tilt";
+constexpr const char* s_trail_tilt_dsc 						= "Camera angle above the floor in degrees, 90 looks straight down";
+constexpr const char* s_trail_length_key 					= "trail-length";
+constexpr const char* s_trail_length_dsc 					= "Length of the floor, 1 matches the flat view";
+
 constexpr const char* s_show_score_key 						= "show-score";
 constexpr const char* s_show_score_dsc 						= "Should the score (lines, numbers) be shown";
 
@@ -98,6 +105,8 @@ constexpr const char* s_fadeout_notes_dsc 					= "Notes fade-out at the edge of 
 
 constexpr const char* s_notes_edge_width_key 				= "notes-edge-width";
 constexpr const char* s_notes_edge_width_dsc 				= "Control the width of the edge around notes";
+constexpr const char* s_notes_velocity_key 					= "notes-velocity";
+constexpr const char* s_notes_velocity_dsc 					= "Brightness change with note velocity";
 
 constexpr const char* s_notes_edge_intensity_key 			= "notes-edge-intensity";
 constexpr const char* s_notes_edge_intensity_dsc 			= "Control the intensity of the edge around notes";
@@ -125,6 +134,8 @@ constexpr const char* s_notes_minor_img_path_dsc 			= "Path to an image on disk 
 
 constexpr const char* s_flashes_size_key 					= "flashes-size";
 constexpr const char* s_flashes_size_dsc 					= "Flash effect size";
+constexpr const char* s_flashes_velocity_key 				= "flashes-velocity";
+constexpr const char* s_flashes_velocity_dsc 				= "Flash size and brightness change with note velocity";
 
 constexpr const char* s_flashes_halo_inner_key 				= "flashes-halo-inner";
 constexpr const char* s_flashes_halo_inner_dsc 				= "Inner size of the halo surrounding the flash";
@@ -155,6 +166,8 @@ constexpr const char* s_particles_speed_dsc 				= "Particles speed";
 
 constexpr const char* s_particles_expansion_key 			= "particles-expansion";
 constexpr const char* s_particles_expansion_dsc 			= "Particles expansion factor";
+constexpr const char* s_particles_velocity_key 				= "particles-velocity";
+constexpr const char* s_particles_velocity_dsc 				= "Particle count and spread change with note velocity";
 
 constexpr const char* s_particles_paths_key 				= "particles-paths";
 constexpr const char* s_particles_paths_dsc 				= "Set of paths (separated by spaces) to black and white images on disk to use as particles";

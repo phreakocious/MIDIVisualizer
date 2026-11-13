@@ -2,10 +2,12 @@
 
 layout(location = 0) in vec2 v;
 layout(location = 1) in int onChan;
+layout(location = 2) in float gain; // velocity gain, 1 is neutral
 
 uniform float time;
 uniform vec2 inverseScreenSize;
 uniform float userScale;
+uniform float velocityStrength;
 uniform float keyboardHeight;
 
 uniform int minNote;
@@ -26,6 +28,7 @@ out INTERFACE {
 	vec2 uv;
 	float onChannel;
 	float id;
+	flat float gain;
 } Out;
 
 
@@ -35,7 +38,9 @@ void main(){
 	float screenRatio = inverseScreenSize.y/inverseScreenSize.x;
 	vec2 scalingFactor = vec2(1.0, horizontalMode ? (1.0/screenRatio) : screenRatio);
 
-	vec2 scaledPosition = v * 2.0 * scale * userScale/notesCount * scalingFactor;
+	// Louder notes give bigger flashes.
+	float velocityGain = mix(1.0, gain, velocityStrength);
+	vec2 scaledPosition = v * 2.0 * scale * userScale * velocityGain/notesCount * scalingFactor;
 	// Shift based on note/flash id.
 	vec2 globalShift = vec2(-1.0 + ((shifts[gl_InstanceID] - shifts[minNote]) * 2.0 + 1.0) / notesCount, 2.0 * keyboardHeight - 1.0);
 	
@@ -45,5 +50,6 @@ void main(){
 	Out.uv = v;
 	Out.onChannel = float(onChan);
 	Out.id = float(gl_InstanceID);
-	
+	Out.gain = velocityGain;
+
 }

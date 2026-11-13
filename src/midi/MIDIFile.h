@@ -27,11 +27,17 @@ public:
 	
 	const double & secondsPerMeasure() const { return _secondsPerMeasure; }
 
+	// Quarter notes per minute at the start of the file.
+	double tempoBPM() const { return _tempos.empty() ? 120.0 : 60000000.0 / double(_tempos[0].tempo); }
+
 	const double & duration() const { return _duration; }
 
 	const int & notesCount() const { return _notesCount; }
 
 	const int & tracksCount() const { return _trackCount; }
+
+	// True when all notes share one velocity (or there are none): such a file carries no dynamics.
+	bool singleVelocity() const { return _minVelocity >= _maxVelocity; }
 
 private:
 
@@ -48,6 +54,8 @@ private:
 	double _duration = 0.0;
 	int _notesCount = 0;
 	int _trackCount = 0;
+	short _minVelocity = 127;
+	short _maxVelocity = 0;
 
 	std::vector<MIDITrack> _tracks;
 	std::vector<MIDITempo> _tempos;

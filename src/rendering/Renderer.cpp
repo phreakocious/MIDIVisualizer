@@ -48,6 +48,11 @@ void Renderer::renderSetup(){
 	glGenBuffers(1, &_keysDataBuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(int) * 128, nullptr, GL_DYNAMIC_DRAW);
+	// Velocity gain of each active key.
+	_keysGainBuffer = 0;
+	glGenBuffers(1, &_keysGainBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 128, nullptr, GL_DYNAMIC_DRAW);
 
 	// -- Wave strips
 	const int numSegments = 512;
@@ -107,13 +112,18 @@ void Renderer::renderSetup(){
 	// Notes data part 1
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), NULL);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), NULL);
 	glVertexAttribDivisor(1, 1);
 	// Notes data part 2
 	glEnableVertexAttribArray(2);
 	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
-	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void*)(4 * sizeof(GLfloat)));
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(4 * sizeof(GLfloat)));
 	glVertexAttribDivisor(2, 1);
+	// Notes data part 3: velocity gain
+	glEnableVertexAttribArray(3);
+	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(5 * sizeof(GLfloat)));
+	glVertexAttribDivisor(3, 1);
 	// Indices
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadIndices);
 	glBindVertexArray(0);
@@ -131,6 +141,11 @@ void Renderer::renderSetup(){
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glVertexAttribIPointer(1, 1, GL_INT, 0, NULL);
 	glVertexAttribDivisor(1, 1);
+	// Keys velocity gain
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, NULL);
+	glVertexAttribDivisor(2, 1);
 	// Indices
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadIndices);
 	glBindVertexArray(0);
@@ -193,6 +208,9 @@ void Renderer::upload(const std::shared_ptr<MIDIScene>& scene){
 	const auto& actives = scene->getActiveKeys();
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, actives.size()*sizeof(int) ,&(actives[0]));
+	const auto& gains = scene->getActiveGains();
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, gains.size()*sizeof(GLfloat), &(gains[0]));
 
 	_programKeyMajors.use();
 	_programKeyMajors.uniforms("actives", actives.size(), actives.data());
@@ -317,7 +335,12 @@ void Renderer::drawParticles(const std::shared_ptr<MIDIScene>& scene, float time
 			_programParticules.uniform("time", particle.elapsed);
 			_programParticules.uniform("duration", particle.duration);
 			_programParticules.uniform("channel", particle.set);
-			glDrawElementsInstanced(GL_TRIANGLES, int(_quadPrimitiveCount), GL_UNSIGNED_INT, (void*)0, state.count);
+			// Louder notes throw more particles, further.
+			const float gain = glm::mix(1.0f, particle.gain, state.velocityStrength);
+			_programParticules.uniform("expansionFactor", state.expansion * gain);
+			// At least one particle, so soft notes still emit with a small count.
+			const int count = state.count < 1 ? state.count : (std::max)(1, int(std::round(float(state.count) * gain)));
+			glDrawElementsInstanced(GL_TRIANGLES, int(_quadPrimitiveCount), GL_UNSIGNED_INT, (void*)0, count);
 		}
 	}
 	
@@ -343,6 +366,7 @@ void Renderer::drawNotes(const std::shared_ptr<MIDIScene>& scene, float time, co
 	_programNotes.uniform("reverseMode", reverseScroll);
 	_programNotes.uniform("edgeWidth", state.edgeWidth);
 	_programNotes.uniform("edgeBrightness", state.edgeBrightness);
+	_programNotes.uniform("velocityStrength", state.velocityStrength);
 
 	_programNotes.uniform("texturesScale", glm::vec2{state.majorTexScale, state.minorTexScale});
 	_programNotes.uniform("texturesStrength", glm::vec2{state.majorTexAlpha, state.minorTexAlpha});
@@ -380,6 +404,7 @@ void Renderer::drawFlashes(const std::shared_ptr<MIDIScene>& scene, float time, 
 	_programFlashes.uniform("time",time);
 	_programFlashes.uniforms("baseColor", state.colors.size(), state.colors.data());
 	_programFlashes.uniform("userScale", state.size);
+	_programFlashes.uniform("velocityStrength", state.velocityStrength);
 	_programFlashes.uniform("haloInnerRadius", state.haloInnerRadius);
 	_programFlashes.uniform("haloOuterRadius", state.haloOuterRadius);
 	_programFlashes.uniform("haloIntensity", state.haloIntensity);
@@ -614,7 +639,9 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 	if(state.hLines || state.digits){
 
-		const float currentAbscisse = time/float(scene->secondsPerMeasure());
+		// Bar 0 starts at the scene's grid origin.
+		const float gridTime = time - float(scene->gridOrigin());
+		const float currentAbscisse = gridTime/float(scene->secondsPerMeasure());
 
 		// Find the measure at the bottom of the screen if forward, top of the screen if bottom
 		// TODO: (MV) explain the magic values.
@@ -632,7 +659,7 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 		const float nextBarDeltaCoord = direction * magicValue1;
 
-		float firstBarCoord = direction * (firstMeasureTime - time) * measureScale + keyboardPos;
+		float firstBarCoord = direction * (firstMeasureTime - gridTime) * measureScale + keyboardPos;
 		
 		// Corrective step.
 		// while the next bar is not on screen, keep stepping forwards.
@@ -694,7 +721,7 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 void Renderer::clean(){
 	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave};
-	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer };
+	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer };
 	glDeleteVertexArrays(sizeof(vaos)/sizeof(vaos[0]), vaos);
 	glDeleteBuffers(sizeof(buffers)/sizeof(buffers[0]), buffers);
 

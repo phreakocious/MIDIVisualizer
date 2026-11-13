@@ -191,6 +191,9 @@ void State::defineOptions(){
 	_sharedInfos[s_show_flashes_key] 	= {Category::EFFECTS, s_show_flashes_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_blur_key] 		= {Category::EFFECTS, s_show_blur_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_keyboard_key] 	= {Category::EFFECTS, s_show_keyboard_dsc, Type::BOOLEAN};
+	_sharedInfos[s_trail_3d_key] 		= {Category::EFFECTS, s_trail_3d_dsc, Type::BOOLEAN};
+	_sharedInfos[s_trail_tilt_key] 		= {Category::EFFECTS, s_trail_tilt_dsc, Type::FLOAT, {20.0f, 90.0f}};
+	_sharedInfos[s_trail_length_key] 	= {Category::EFFECTS, s_trail_length_dsc, Type::FLOAT, {1.0f, 8.0f}};
 	_sharedInfos[s_show_score_key] 		= {Category::EFFECTS, s_show_score_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_notes_key] 		= {Category::EFFECTS, s_show_notes_dsc, Type::BOOLEAN};
 	_sharedInfos[s_show_pedal_key] 		= {Category::EFFECTS, s_show_pedal_dsc, Type::BOOLEAN};
@@ -202,6 +205,7 @@ void State::defineOptions(){
 	_sharedInfos[s_minor_size_key] 					= {Category::NOTES, s_minor_size_dsc, Type::FLOAT, {0.1f, 1.0f}};
 	_sharedInfos[s_fadeout_notes_key] 				= {Category::NOTES, s_fadeout_notes_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_edge_width_key] 			= {Category::NOTES, s_notes_edge_width_dsc, Type::FLOAT, {0.0f, 1.0f}};
+	_sharedInfos[s_notes_velocity_key] 				= {Category::NOTES, s_notes_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_edge_intensity_key] 		= {Category::NOTES, s_notes_edge_intensity_dsc, Type::FLOAT, {0.0f, 100.0f}};
 	_sharedInfos[s_notes_corner_radius_key]  		= {Category::NOTES, s_notes_corner_radius_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_major_img_scale_key]   	= {Category::NOTES, s_notes_major_img_scale_dsc, Type::FLOAT};
@@ -213,6 +217,7 @@ void State::defineOptions(){
 
 	// Flashes
 	_sharedInfos[s_flashes_size_key] 			= {Category::FLASHES, s_flashes_size_dsc, Type::FLOAT, {0.1f, 3.0f}};
+	_sharedInfos[s_flashes_velocity_key] 		= {Category::FLASHES, s_flashes_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_inner_key] 		= {Category::FLASHES, s_flashes_halo_inner_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_outer_key] 		= {Category::FLASHES, s_flashes_halo_outer_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_intensity_key] 	= {Category::FLASHES, s_flashes_halo_intensity_dsc, Type::FLOAT, {0.0f, 2.0f}};
@@ -225,6 +230,7 @@ void State::defineOptions(){
 	_sharedInfos[s_particles_size_key] 			= {Category::PARTICLES, s_particles_size_dsc, Type::FLOAT, {1.0f, 10.0f}};
 	_sharedInfos[s_particles_speed_key] 		= {Category::PARTICLES, s_particles_speed_dsc, Type::FLOAT};
 	_sharedInfos[s_particles_expansion_key] 	= {Category::PARTICLES, s_particles_expansion_dsc, Type::FLOAT};
+	_sharedInfos[s_particles_velocity_key] 		= {Category::PARTICLES, s_particles_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_particles_paths_key] 		= {Category::PARTICLES, s_particles_paths_dsc, Type::PATH};
 	_sharedInfos[s_particles_turbulences_key] 	= {Category::PARTICLES, s_particles_turbulences_dsc, Type::FLOAT, {0.f, 10.f}};
 
@@ -378,6 +384,9 @@ void State::updateOptions(){
 	_boolInfos[s_show_vert_lines_key] = &score.vLines;
 	_boolInfos[s_show_numbers_key] = &score.digits;
 	_boolInfos[s_show_keyboard_key] = &showKeyboard;
+	_boolInfos[s_trail_3d_key] = &trail3D;
+	_floatInfos[s_trail_tilt_key] = &trailTilt;
+	_floatInfos[s_trail_length_key] = &trailLength;
 	_boolInfos[s_bg_img_behind_keyboard_key] = &background.imageBehindKeyboard;
 	_boolInfos[s_keyboard_highlight_key] = &keyboard.highlightKeys;
 	_boolInfos[s_keyboard_custom_colors_key] = &keyboard.customKeyColors;
@@ -393,9 +402,11 @@ void State::updateOptions(){
 	_floatInfos[s_particles_size_key] = &particles.scale;
 	_floatInfos[s_particles_speed_key] = &particles.speed;
 	_floatInfos[s_particles_expansion_key] = &particles.expansion;
+	_floatInfos[s_particles_velocity_key] = &particles.velocityStrength;
 	_floatInfos[s_particles_turbulences_key] = &particles.turbulenceStrength;
 	_floatInfos[s_blur_attenuation_key] = &attenuation;
 	_floatInfos[s_flashes_size_key] = &flashes.size;
+	_floatInfos[s_flashes_velocity_key] = &flashes.velocityStrength;
 	_floatInfos[s_flashes_halo_inner_key] = &flashes.haloInnerRadius;
 	_floatInfos[s_flashes_halo_outer_key] = &flashes.haloOuterRadius;
 	_floatInfos[s_flashes_halo_intensity_key] = &flashes.haloIntensity;
@@ -406,6 +417,7 @@ void State::updateOptions(){
 	_floatInfos[s_bg_img_scroll_y_key] = &background.scrollSpeed[1];
 	_floatInfos[s_fadeout_notes_key] = &notes.fadeOut;
 	_floatInfos[s_notes_edge_width_key] = &notes.edgeWidth;
+	_floatInfos[s_notes_velocity_key] = &notes.velocityStrength;
 	_floatInfos[s_notes_edge_intensity_key] = &notes.edgeBrightness;
 	_floatInfos[s_notes_corner_radius_key] = &notes.cornerRadius;
 	_floatInfos[s_notes_major_img_scale_key] = &notes.majorTexScale;
@@ -836,7 +848,11 @@ void State::reset(){
 	showNotes = true;
 	showScore = true;
 	showKeyboard = true;
+	trail3D = false;
+	trailTilt = 45.0f;
+	trailLength = 4.0f;
 	flashes.size = 1.0f;
+	flashes.velocityStrength = 1.0f;
 	flashes.haloIntensity = 1.0f;
 	flashes.haloInnerRadius = 0.14f;
 	flashes.haloOuterRadius = 1.0f;
@@ -865,6 +881,7 @@ void State::reset(){
 	particles.expansion = 1.0f;
 	particles.scale = 1.0f;
 	particles.count = 256;
+	particles.velocityStrength = 1.0f;
 	particles.imagePaths.clear();
 	const GLuint blankID = ResourcesManager::getTextureFor("blankarray");
 	particles.tex = blankID;
@@ -893,6 +910,7 @@ void State::reset(){
 
 	notes.edgeBrightness = 1.05f;
 	notes.edgeWidth = 0.1f;
+	notes.velocityStrength = 1.0f;
 	notes.fadeOut = 0.0f;
 	notes.cornerRadius = 0.09f;
 	notes.majorTexAlpha = 1.0;

@@ -58,6 +58,7 @@ void MIDISceneFile::updateVisibleNotes( const FilterOptions& filter )
 		data.duration = float( note.duration );
 		data.isMinor = 0.0f;
 		data.set = float( note.set );
+		data.gain = gainFor( note.velocity );
 	}
 
 	for( size_t i = 0; i < minorCount; ++i )
@@ -69,6 +70,7 @@ void MIDISceneFile::updateVisibleNotes( const FilterOptions& filter )
 		data.duration = float( note.duration );
 		data.isMinor = 1.0f;
 		data.set = float( note.set );
+		data.gain = gainFor( note.velocity );
 	}
 	// Upload to the GPU.
 	assert( totalCount < ( 1 << 31 ) );
@@ -87,6 +89,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 			particle.note = -1;
 			particle.set = -1;
 			particle.duration = particle.start = particle.elapsed = 0.0f;
+			particle.gain = 1.0f;
 		}
 	}
 	// Get notes actives.
@@ -95,6 +98,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 	for(int i = 0; i < 128; ++i){
 		const auto & note = actives[i];
 		_actives[i] = note.enabled ? note.set : -1;
+		_activeGains[i] = note.enabled ? effectGain(gainFor(short(note.velocity))) : 1.0f;
 		// Check if the note was triggered at this frame.
 		if(note.start > _previousTime && note.start <= time){
 			// Find an available particles system and update it with the note parameters.
@@ -107,6 +111,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 					particle.note = i;
 					particle.set = note.set;
 					particle.elapsed = 0.0f;
+					particle.gain = effectGain(gainFor(short(note.velocity)));
 					break;
 				}
 			}
@@ -125,6 +130,15 @@ double MIDISceneFile::duration() const {
 
 double MIDISceneFile::secondsPerMeasure() const {
 	return _midiFile.secondsPerMeasure();
+}
+
+float MIDISceneFile::gainFor(short velocity) const {
+	// A file with a single velocity carries no dynamics: draw it as today.
+	return _midiFile.singleVelocity() ? 1.0f : velocityGain(velocity);
+}
+
+double MIDISceneFile::tempoBPM() const {
+	return _midiFile.tempoBPM();
 }
 
 int MIDISceneFile::notesCount() const {
