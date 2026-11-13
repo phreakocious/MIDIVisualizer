@@ -99,6 +99,7 @@ set(Sources
 	"src/helpers/ResourcesManager.h"
 	"src/helpers/Recorder.cpp"
 	"src/helpers/Recorder.h"
+	"src/helpers/TakeClock.h"
 	"src/helpers/Configuration.cpp"
 	"src/helpers/Configuration.h"
 	"src/helpers/ImGuiStyle.cpp"
