@@ -685,6 +685,8 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 	_programKeys3D.uniform("shadowOffset", shadowOffset);
 	_programKeys3D.uniform("lightDir", lightDir);
 	_programKeys3D.uniform("eye", eye);
+	_programKeys3D.uniform("whiteTop", whiteTop);
+	_programKeys3D.uniform("gap", gap);
 	_programKeys3D.uniform("whiteColor", whiteColor);
 	_programKeys3D.uniform("blackColor", blackColor);
 	_programKeys3D.uniforms("majorColor", majorColors.size(), majorColors.data());
