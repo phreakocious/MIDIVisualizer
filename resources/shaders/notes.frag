@@ -82,10 +82,10 @@ void main(){
 	// Fragment color.
 	int cid = int(In.channel);
 	fragColor.rgb = tinting * colorScale * mix(baseColor[cid], minorColor[cid], In.isMinor);
-	// Velocity: softer notes dim, louder ones brighten and lean toward white (capped so chords keep their color).
+	// Velocity: softer notes dim, louder ones brighten and lean toward white, about halfway at velocity 127.
 	float gain = mix(1.0, In.gain, velocityStrength);
 	fragColor.rgb *= gain;
-	fragColor.rgb = mix(fragColor.rgb, vec3(1.0), clamp((gain - 1.0) * 0.5, 0.0, 0.35));
+	fragColor.rgb = mix(fragColor.rgb, vec3(1.0), clamp((gain - 1.0) * 1.15, 0.0, 0.5));
 
 	// Apply scaling factor to edge.
 	float deltaPix = fwidth(In.uv.x) * 4.0;

@@ -843,7 +843,7 @@ void State::reset(){
 	showScore = true;
 	showKeyboard = true;
 	flashes.size = 1.0f;
-	flashes.velocityStrength = 0.6f;
+	flashes.velocityStrength = 1.0f;
 	flashes.haloIntensity = 1.0f;
 	flashes.haloInnerRadius = 0.14f;
 	flashes.haloOuterRadius = 1.0f;
@@ -872,7 +872,7 @@ void State::reset(){
 	particles.expansion = 1.0f;
 	particles.scale = 1.0f;
 	particles.count = 256;
-	particles.velocityStrength = 0.6f;
+	particles.velocityStrength = 1.0f;
 	particles.imagePaths.clear();
 	const GLuint blankID = ResourcesManager::getTextureFor("blankarray");
 	particles.tex = blankID;
@@ -901,7 +901,7 @@ void State::reset(){
 
 	notes.edgeBrightness = 1.05f;
 	notes.edgeWidth = 0.1f;
-	notes.velocityStrength = 0.6f;
+	notes.velocityStrength = 1.0f;
 	notes.fadeOut = 0.0f;
 	notes.cornerRadius = 0.09f;
 	notes.majorTexAlpha = 1.0;

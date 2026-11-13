@@ -67,8 +67,9 @@ void main(){
 	// Mix the sprite color and the halo effect.
 	fragColor = mix(spriteColor, haloColor, haloColor.a);
 	
-	// Boost intensity, more for louder notes.
-	fragColor *= 1.1 * In.gain;
+	// Boost intensity. Velocity scales color only: alpha would square it after premultiplication.
+	fragColor *= 1.1;
+	fragColor.rgb *= In.gain;
 	// Premultiplied alpha.
 	fragColor.rgb *= fragColor.a;
 }
