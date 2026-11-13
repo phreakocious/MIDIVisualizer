@@ -21,7 +21,7 @@ jobs:
             artifact_name: build/Release/MIDIVisualizer.exe
             asset_name: MIDIVisualizer-windows-64bits.zip
             ffmpeg-archive: ffmpeg-windows-64-static-lgpl.zip
-          - os: macos-15
+          - os: macos-15-intel
             cmake-opts: -G Xcode
             artifact_name: build/Release/MIDIVisualizer.app
             asset_name: MIDIVisualizer-macos.zip
