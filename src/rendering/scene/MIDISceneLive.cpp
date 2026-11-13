@@ -177,6 +177,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 				newNote.duration = 0.0f;
 				newNote.note = note;
 				newNote.gain = velocityGain(velocity);
+				_activeGains[note] = newNote.gain;
 				// Save the original channel.
 				_notesInfos[index].channel = message.get_channel();
 				// Compute set according to current setting.

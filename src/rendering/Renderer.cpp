@@ -48,6 +48,11 @@ void Renderer::renderSetup(){
 	glGenBuffers(1, &_keysDataBuffer);
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(int) * 128, nullptr, GL_DYNAMIC_DRAW);
+	// Velocity gain of each active key.
+	_keysGainBuffer = 0;
+	glGenBuffers(1, &_keysGainBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 128, nullptr, GL_DYNAMIC_DRAW);
 
 	// -- Wave strips
 	const int numSegments = 512;
@@ -136,6 +141,11 @@ void Renderer::renderSetup(){
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glVertexAttribIPointer(1, 1, GL_INT, 0, NULL);
 	glVertexAttribDivisor(1, 1);
+	// Keys velocity gain
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, NULL);
+	glVertexAttribDivisor(2, 1);
 	// Indices
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadIndices);
 	glBindVertexArray(0);
@@ -198,6 +208,9 @@ void Renderer::upload(const std::shared_ptr<MIDIScene>& scene){
 	const auto& actives = scene->getActiveKeys();
 	glBindBuffer(GL_ARRAY_BUFFER, _keysDataBuffer);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, actives.size()*sizeof(int) ,&(actives[0]));
+	const auto& gains = scene->getActiveGains();
+	glBindBuffer(GL_ARRAY_BUFFER, _keysGainBuffer);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, gains.size()*sizeof(GLfloat), &(gains[0]));
 
 	_programKeyMajors.use();
 	_programKeyMajors.uniforms("actives", actives.size(), actives.data());
@@ -386,6 +399,7 @@ void Renderer::drawFlashes(const std::shared_ptr<MIDIScene>& scene, float time, 
 	_programFlashes.uniform("time",time);
 	_programFlashes.uniforms("baseColor", state.colors.size(), state.colors.data());
 	_programFlashes.uniform("userScale", state.size);
+	_programFlashes.uniform("velocityStrength", state.velocityStrength);
 	_programFlashes.uniform("haloInnerRadius", state.haloInnerRadius);
 	_programFlashes.uniform("haloOuterRadius", state.haloOuterRadius);
 	_programFlashes.uniform("haloIntensity", state.haloIntensity);
@@ -702,7 +716,7 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 void Renderer::clean(){
 	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave};
-	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer };
+	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer };
 	glDeleteVertexArrays(sizeof(vaos)/sizeof(vaos[0]), vaos);
 	glDeleteBuffers(sizeof(buffers)/sizeof(buffers[0]), buffers);
 

@@ -6,6 +6,7 @@ in INTERFACE {
 	vec2 uv;
 	float onChannel;
 	float id;
+	flat float gain;
 } In;
 
 uniform sampler2D textureFlash;
@@ -66,8 +67,8 @@ void main(){
 	// Mix the sprite color and the halo effect.
 	fragColor = mix(spriteColor, haloColor, haloColor.a);
 	
-	// Boost intensity.
-	fragColor *= 1.1;
+	// Boost intensity, more for louder notes.
+	fragColor *= 1.1 * In.gain;
 	// Premultiplied alpha.
 	fragColor.rgb *= fragColor.a;
 }

@@ -70,6 +70,8 @@ public:
 
 	const std::array<int, 128>& getActiveKeys() const { return _actives; }
 
+	const std::array<float, 128>& getActiveGains() const { return _activeGains; }
+
 	const std::vector<Particles>& getParticles() const { return _particles; }
 
 	const std::vector<GPUNote>& getNotes() const { return _notes; };
@@ -84,6 +86,7 @@ protected:
 
 	std::vector<GPUNote> _notes;
 	std::array<int, 128> _actives;
+	std::array<float, 128> _activeGains; ///< Velocity gain of the note on each key.
 	std::vector<Particles> _particles;
 	Pedals _pedals;
 	int _effectiveNotesCount = 0;

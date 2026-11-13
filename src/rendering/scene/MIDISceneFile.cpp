@@ -97,6 +97,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 	for(int i = 0; i < 128; ++i){
 		const auto & note = actives[i];
 		_actives[i] = note.enabled ? note.set : -1;
+		_activeGains[i] = note.enabled ? gainFor(short(note.velocity)) : 1.0f;
 		// Check if the note was triggered at this frame.
 		if(note.start > _previousTime && note.start <= time){
 			// Find an available particles system and update it with the note parameters.
