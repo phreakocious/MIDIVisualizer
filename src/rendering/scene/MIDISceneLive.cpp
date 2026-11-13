@@ -178,7 +178,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 				newNote.duration = 0.0f;
 				newNote.note = note;
 				newNote.gain = velocityGain(velocity);
-				_activeGains[note] = newNote.gain;
+				_activeGains[note] = effectGain(newNote.gain);
 				// Save the original channel.
 				_notesInfos[index].channel = message.get_channel();
 				// Compute set according to current setting.
@@ -211,7 +211,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 						particle.note = note;
 						particle.set = int(newNote.set);
 						particle.elapsed = 0.0f;
-						particle.gain = newNote.gain;
+						particle.gain = effectGain(newNote.gain);
 						break;
 					}
 				}
@@ -298,7 +298,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 		// Update for notes currently playins.
 		if(note.start <= time && note.start+note.duration >= time){
 			_actives[noteId.note] = int(note.set);
-			_activeGains[noteId.note] = note.gain;
+			_activeGains[noteId.note] = effectGain(note.gain);
 		}
 		// Detect notes that started at this frame.
 		if(note.start > _previousTime && note.start <= time){
@@ -311,7 +311,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 					particle.note = noteId.note;
 					particle.set = int(note.set);
 					particle.elapsed = 0.0f;
-					particle.gain = note.gain;
+					particle.gain = effectGain(note.gain);
 					break;
 				}
 			}

@@ -136,5 +136,10 @@ inline float velocityGain(int velocity){
 	return 0.25f + 0.75f * (v / 80.0f);
 }
 
+// Flashes and particles: below neutral the note gain is cubed, so light notes stay quiet; above, unchanged.
+inline float effectGain(float noteGain){
+	return noteGain < 1.0f ? noteGain * noteGain * noteGain : noteGain;
+}
+
 
 #endif // MIDI_UTILS_H
