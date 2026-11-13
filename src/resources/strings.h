@@ -98,6 +98,8 @@ constexpr const char* s_fadeout_notes_dsc 					= "Notes fade-out at the edge of 
 
 constexpr const char* s_notes_edge_width_key 				= "notes-edge-width";
 constexpr const char* s_notes_edge_width_dsc 				= "Control the width of the edge around notes";
+constexpr const char* s_notes_velocity_key 					= "notes-velocity";
+constexpr const char* s_notes_velocity_dsc 					= "Brightness change with note velocity";
 
 constexpr const char* s_notes_edge_intensity_key 			= "notes-edge-intensity";
 constexpr const char* s_notes_edge_intensity_dsc 			= "Control the intensity of the edge around notes";
@@ -125,6 +127,8 @@ constexpr const char* s_notes_minor_img_path_dsc 			= "Path to an image on disk 
 
 constexpr const char* s_flashes_size_key 					= "flashes-size";
 constexpr const char* s_flashes_size_dsc 					= "Flash effect size";
+constexpr const char* s_flashes_velocity_key 				= "flashes-velocity";
+constexpr const char* s_flashes_velocity_dsc 				= "Flash size and brightness change with note velocity";
 
 constexpr const char* s_flashes_halo_inner_key 				= "flashes-halo-inner";
 constexpr const char* s_flashes_halo_inner_dsc 				= "Inner size of the halo surrounding the flash";
@@ -155,6 +159,8 @@ constexpr const char* s_particles_speed_dsc 				= "Particles speed";
 
 constexpr const char* s_particles_expansion_key 			= "particles-expansion";
 constexpr const char* s_particles_expansion_dsc 			= "Particles expansion factor";
+constexpr const char* s_particles_velocity_key 				= "particles-velocity";
+constexpr const char* s_particles_velocity_dsc 				= "Particle count and spread change with note velocity";
 
 constexpr const char* s_particles_paths_key 				= "particles-paths";
 constexpr const char* s_particles_paths_dsc 				= "Set of paths (separated by spaces) to black and white images on disk to use as particles";

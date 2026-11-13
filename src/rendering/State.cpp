@@ -202,6 +202,7 @@ void State::defineOptions(){
 	_sharedInfos[s_minor_size_key] 					= {Category::NOTES, s_minor_size_dsc, Type::FLOAT, {0.1f, 1.0f}};
 	_sharedInfos[s_fadeout_notes_key] 				= {Category::NOTES, s_fadeout_notes_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_edge_width_key] 			= {Category::NOTES, s_notes_edge_width_dsc, Type::FLOAT, {0.0f, 1.0f}};
+	_sharedInfos[s_notes_velocity_key] 				= {Category::NOTES, s_notes_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_edge_intensity_key] 		= {Category::NOTES, s_notes_edge_intensity_dsc, Type::FLOAT, {0.0f, 100.0f}};
 	_sharedInfos[s_notes_corner_radius_key]  		= {Category::NOTES, s_notes_corner_radius_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_notes_major_img_scale_key]   	= {Category::NOTES, s_notes_major_img_scale_dsc, Type::FLOAT};
@@ -213,6 +214,7 @@ void State::defineOptions(){
 
 	// Flashes
 	_sharedInfos[s_flashes_size_key] 			= {Category::FLASHES, s_flashes_size_dsc, Type::FLOAT, {0.1f, 3.0f}};
+	_sharedInfos[s_flashes_velocity_key] 		= {Category::FLASHES, s_flashes_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_inner_key] 		= {Category::FLASHES, s_flashes_halo_inner_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_outer_key] 		= {Category::FLASHES, s_flashes_halo_outer_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_flashes_halo_intensity_key] 	= {Category::FLASHES, s_flashes_halo_intensity_dsc, Type::FLOAT, {0.0f, 2.0f}};
@@ -225,6 +227,7 @@ void State::defineOptions(){
 	_sharedInfos[s_particles_size_key] 			= {Category::PARTICLES, s_particles_size_dsc, Type::FLOAT, {1.0f, 10.0f}};
 	_sharedInfos[s_particles_speed_key] 		= {Category::PARTICLES, s_particles_speed_dsc, Type::FLOAT};
 	_sharedInfos[s_particles_expansion_key] 	= {Category::PARTICLES, s_particles_expansion_dsc, Type::FLOAT};
+	_sharedInfos[s_particles_velocity_key] 		= {Category::PARTICLES, s_particles_velocity_dsc, Type::FLOAT, {0.0f, 1.0f}};
 	_sharedInfos[s_particles_paths_key] 		= {Category::PARTICLES, s_particles_paths_dsc, Type::PATH};
 	_sharedInfos[s_particles_turbulences_key] 	= {Category::PARTICLES, s_particles_turbulences_dsc, Type::FLOAT, {0.f, 10.f}};
 
@@ -393,9 +396,11 @@ void State::updateOptions(){
 	_floatInfos[s_particles_size_key] = &particles.scale;
 	_floatInfos[s_particles_speed_key] = &particles.speed;
 	_floatInfos[s_particles_expansion_key] = &particles.expansion;
+	_floatInfos[s_particles_velocity_key] = &particles.velocityStrength;
 	_floatInfos[s_particles_turbulences_key] = &particles.turbulenceStrength;
 	_floatInfos[s_blur_attenuation_key] = &attenuation;
 	_floatInfos[s_flashes_size_key] = &flashes.size;
+	_floatInfos[s_flashes_velocity_key] = &flashes.velocityStrength;
 	_floatInfos[s_flashes_halo_inner_key] = &flashes.haloInnerRadius;
 	_floatInfos[s_flashes_halo_outer_key] = &flashes.haloOuterRadius;
 	_floatInfos[s_flashes_halo_intensity_key] = &flashes.haloIntensity;
@@ -406,6 +411,7 @@ void State::updateOptions(){
 	_floatInfos[s_bg_img_scroll_y_key] = &background.scrollSpeed[1];
 	_floatInfos[s_fadeout_notes_key] = &notes.fadeOut;
 	_floatInfos[s_notes_edge_width_key] = &notes.edgeWidth;
+	_floatInfos[s_notes_velocity_key] = &notes.velocityStrength;
 	_floatInfos[s_notes_edge_intensity_key] = &notes.edgeBrightness;
 	_floatInfos[s_notes_corner_radius_key] = &notes.cornerRadius;
 	_floatInfos[s_notes_major_img_scale_key] = &notes.majorTexScale;
@@ -837,6 +843,7 @@ void State::reset(){
 	showScore = true;
 	showKeyboard = true;
 	flashes.size = 1.0f;
+	flashes.velocityStrength = 0.6f;
 	flashes.haloIntensity = 1.0f;
 	flashes.haloInnerRadius = 0.14f;
 	flashes.haloOuterRadius = 1.0f;
@@ -865,6 +872,7 @@ void State::reset(){
 	particles.expansion = 1.0f;
 	particles.scale = 1.0f;
 	particles.count = 256;
+	particles.velocityStrength = 0.6f;
 	particles.imagePaths.clear();
 	const GLuint blankID = ResourcesManager::getTextureFor("blankarray");
 	particles.tex = blankID;
@@ -893,6 +901,7 @@ void State::reset(){
 
 	notes.edgeBrightness = 1.05f;
 	notes.edgeWidth = 0.1f;
+	notes.velocityStrength = 0.6f;
 	notes.fadeOut = 0.0f;
 	notes.cornerRadius = 0.09f;
 	notes.majorTexAlpha = 1.0;

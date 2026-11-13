@@ -942,6 +942,11 @@ void Viewer::showNoteOptions() {
 	}
 	ImGui::helpTooltip(s_notes_edge_intensity_dsc);
 
+	if(ImGui::SliderPercent("Velocity##notes", &_state.notes.velocityStrength, 0.0f, 1.0f)){
+		_state.notes.velocityStrength = glm::clamp(_state.notes.velocityStrength, 0.0f, 1.0f);
+	}
+	ImGui::helpTooltip(s_notes_velocity_dsc);
+
 	ImGui::PopItemWidth();
 }
 
@@ -955,6 +960,10 @@ void Viewer::showFlashOptions() {
 	ImGuiPushItemWidth(100);
 	ImGui::SliderFloat("Scale##flash", &_state.flashes.size, 0.1f, 3.0f, "%.2fx");
 	ImGui::helpTooltip(s_flashes_size_dsc);
+	if(ImGui::SliderPercent("Velocity##flash", &_state.flashes.velocityStrength, 0.0f, 1.0f)){
+		_state.flashes.velocityStrength = glm::clamp(_state.flashes.velocityStrength, 0.0f, 1.0f);
+	}
+	ImGui::helpTooltip(s_flashes_velocity_dsc);
 	ImGui::PopItemWidth();
 
 	// Additional halo control
@@ -1046,6 +1055,11 @@ void Viewer::showParticleOptions(){
 		_state.particles.count = glm::clamp(_state.particles.count, 1, 512);
 	}
 	ImGui::helpTooltip(s_particles_count_dsc);
+	ImGuiSameLine(COLUMN_SIZE);
+	if(ImGui::SliderPercent("Velocity##particles", &_state.particles.velocityStrength, 0.0f, 1.0f)){
+		_state.particles.velocityStrength = glm::clamp(_state.particles.velocityStrength, 0.0f, 1.0f);
+	}
+	ImGui::helpTooltip(s_particles_velocity_dsc);
 	ImGui::PopItemWidth();
 
 	if (mp1 || mp0) {

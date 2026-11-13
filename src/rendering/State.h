@@ -97,6 +97,7 @@ public:
 		float expansion; ///< Expansion factor.
 		float scale; ///< Particles scale.
 		int count; ///< Number of particles.
+		float velocityStrength; ///< How much note velocity changes count and spread.
 		float turbulenceScale; ///< Turbulence noise scale (not exposed)
 		float turbulenceStrength; ///< Turbulence intensity
 	};
@@ -158,6 +159,7 @@ public:
 		float edgeWidth; ///< Edges drawn around the notes.
 		float edgeBrightness; ///< Factor applied around the notes edges.
 		float cornerRadius; ///< Notes rounding factor.
+		float velocityStrength; ///< How much note velocity changes brightness.
 		float majorTexScale; ///< Scale for the major texture
 		float minorTexScale; ///< Scale for the minor texture
 		float majorTexAlpha; ///< Intensity for the major texture
@@ -172,6 +174,7 @@ public:
 		std::vector<std::string> imagePath;
 		ColorArray colors; ///< Flashes color.
 		float size; ///< Size of float
+		float velocityStrength; ///< How much note velocity changes size and brightness.
 		float haloInnerRadius; ///< Inner halo size
 		float haloOuterRadius; ///< Outer halo size
 		float haloIntensity; ///< Brightness of the halo
