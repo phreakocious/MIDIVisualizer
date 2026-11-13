@@ -99,6 +99,8 @@ set(Sources
 	"src/helpers/ResourcesManager.h"
 	"src/helpers/Recorder.cpp"
 	"src/helpers/Recorder.h"
+	"src/helpers/AudioInput.cpp"
+	"src/helpers/AudioInput.h"
 	"src/helpers/WavWriter.cpp"
 	"src/helpers/WavWriter.h"
 	"src/helpers/TakeClock.h"
@@ -176,6 +178,9 @@ if(WIN32)
 endif()
 
 if(APPLE)
+	# Takes capture audio through a Core Audio input queue.
+	target_compile_definitions(MIDIVisualizer PRIVATE MIDIVIZ_SUPPORT_AUDIO_INPUT)
+	target_link_libraries(MIDIVisualizer PRIVATE "-framework AudioToolbox" "-framework CoreAudio" "-framework CoreFoundation")
 	target_sources(MIDIVisualizer PRIVATE resources/icon/MIDIVisualizer.icns)
 	set_target_properties(MIDIVisualizer PROPERTIES MACOSX_BUNDLE TRUE)
 	set_source_files_properties(resources/icon/MIDIVisualizer.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")

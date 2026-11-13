@@ -30,5 +30,7 @@
   	<true/>
   	<key>CFBundleIconFile</key>
   	<string>MIDIVisualizer.icns</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MIDIVisualizer records your instrument's sound for takes.</string>
 </dict>
 </plist>
