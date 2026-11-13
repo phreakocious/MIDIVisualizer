@@ -162,6 +162,45 @@ void Renderer::renderSetup(){
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _waveIndices);
 	glBindVertexArray(0);
 
+	// -- 3D keys: one unit box, drawn once per key.
+	std::vector<GLfloat> box;
+	const glm::vec3 axes[3] = {{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}};
+	for(int a = 0; a < 3; ++a){
+		for(float sign : {-1.0f, 1.0f}){
+			const glm::vec3 nrm = sign * axes[a];
+			const glm::vec3 u = 0.5f * axes[(a + 1) % 3];
+			const glm::vec3 w = 0.5f * axes[(a + 2) % 3];
+			const glm::vec3 c = 0.5f * nrm;
+			// Two triangles per face; each vertex is a position then the face normal.
+			for(const glm::vec3& p : {c - u - w, c + u - w, c + u + w, c - u - w, c + u + w, c - u + w}){
+				box.insert(box.end(), {p.x, p.y, p.z, nrm.x, nrm.y, nrm.z});
+			}
+		}
+	}
+	glGenBuffers(1, &_boxVertices);
+	glBindBuffer(GL_ARRAY_BUFFER, _boxVertices);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * box.size(), box.data(), GL_STATIC_DRAW);
+	// Per key: x center, width, length, height, pressed set, is black.
+	glGenBuffers(1, &_keys3DBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, _keys3DBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 128, nullptr, GL_DYNAMIC_DRAW);
+
+	glGenVertexArrays(1, &_vaoKeys3D);
+	glBindVertexArray(_vaoKeys3D);
+	glBindBuffer(GL_ARRAY_BUFFER, _boxVertices);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), NULL);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+	glBindBuffer(GL_ARRAY_BUFFER, _keys3DBuffer);
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), NULL);
+	glVertexAttribDivisor(2, 1);
+	glEnableVertexAttribArray(3);
+	glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(4 * sizeof(GLfloat)));
+	glVertexAttribDivisor(3, 1);
+	glBindVertexArray(0);
+
 	checkGLError();
 
 	// Programs.
@@ -170,6 +209,7 @@ void Renderer::renderSetup(){
 	_programParticules.init("particles_vert", "particles_frag");
 	_programKeyMajors.init("majorKeys_vert", "majorKeys_frag");
 	_programKeyMinors.init("minorKeys_vert", "minorKeys_frag");
+	_programKeys3D.init("keys3d_vert", "keys3d_frag");
 	_programPedals.init("pedal_vert", "pedal_frag");
 	_programScoreBars.init("score_bars_vert", "score_bars_frag");
 	_programScoreLabels.init("score_labels_vert", "score_labels_frag");
@@ -456,6 +496,61 @@ void Renderer::drawKeyboard(const std::shared_ptr<MIDIScene>& scene, float, cons
 	glUseProgram(0);
 }
 
+void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, const glm::mat4 & mvp, const glm::vec3 & eye, float aspect, float depth, const glm::vec3 & whiteColor, const glm::vec3 & blackColor, const ColorArray & majorColors, const ColorArray & minorColors, bool highlightKeys, float minorsWidth, float minorHeight) {
+	// Same layout as the flat keyboard: white keys share the width, black keys sit between two white keys.
+	static const int whiteIndex[12] = {0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6};
+	static const bool isBlack[12] = {false, true, false, true, false, false, true, false, true, false, true, false};
+	const auto& actives = scene->getActiveKeys();
+	const int count = int(_keyCount);
+	const float slot = 2.0f * aspect / float(count);
+	const float whiteHeight = 0.6f * slot;
+	const float blackWidth = 0.9f * slot * minorsWidth;
+
+	std::vector<GLfloat> keys;
+	keys.reserve(6 * 128);
+	for(int note = 0; note < 128; ++note){
+		const int k = note % 12;
+		const int white = (note / 12) * 7 + whiteIndex[k] - int(_minKeyMajor);
+		const float set = float(actives[note]);
+		if(!isBlack[k]){
+			if(white < 0 || white >= count){
+				continue;
+			}
+			keys.insert(keys.end(), {-aspect + (float(white) + 0.5f) * slot, 0.95f * slot, depth, whiteHeight, set, 0.0f});
+			continue;
+		}
+		// Between this white key and the next, nudged like the flat keyboard.
+		const float shift = (k == 1 || k == 6) ? -0.1f : ((k == 3 || k == 10) ? 0.1f : 0.0f);
+		const float x = -aspect + float(white + 1) * slot + shift * blackWidth;
+		if(std::abs(x) >= aspect - 0.5f * slot){
+			continue;
+		}
+		keys.insert(keys.end(), {x, blackWidth, minorHeight * depth, whiteHeight + 0.45f * slot, set, 1.0f});
+	}
+	glBindBuffer(GL_ARRAY_BUFFER, _keys3DBuffer);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(GLfloat) * keys.size(), keys.data());
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	_programKeys3D.use();
+	_programKeys3D.uniform("mvp", mvp);
+	_programKeys3D.uniform("eye", eye);
+	_programKeys3D.uniform("backZ", -depth);
+	_programKeys3D.uniform("pressAngle", glm::radians(4.0f));
+	_programKeys3D.uniform("whiteColor", whiteColor);
+	_programKeys3D.uniform("blackColor", blackColor);
+	_programKeys3D.uniforms("majorColor", majorColors.size(), majorColors.data());
+	_programKeys3D.uniforms("minorColor", minorColors.size(), minorColors.data());
+	_programKeys3D.uniform("highlightKeys", highlightKeys);
+
+	glEnable(GL_DEPTH_TEST);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glBindVertexArray(_vaoKeys3D);
+	glDrawArraysInstanced(GL_TRIANGLES, 0, 36, GLsizei(keys.size() / 6));
+	glBindVertexArray(0);
+	glDisable(GL_DEPTH_TEST);
+	glUseProgram(0);
+}
+
 void Renderer::drawPedals(const std::shared_ptr<MIDIScene>& scene, float time, const glm::vec2 & invScreenSize, const State::PedalsState & state, float keyboardHeight, bool horizontalMode) {
 
 	glEnable(GL_BLEND);
@@ -720,8 +815,8 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 }
 
 void Renderer::clean(){
-	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave};
-	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer };
+	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave, _vaoKeys3D};
+	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer, _boxVertices, _keys3DBuffer };
 	glDeleteVertexArrays(sizeof(vaos)/sizeof(vaos[0]), vaos);
 	glDeleteBuffers(sizeof(buffers)/sizeof(buffers[0]), buffers);
 

@@ -40,6 +40,9 @@ public:
 	
 	void drawKeyboard(const std::shared_ptr<MIDIScene>& scene, float time, const glm::vec2 & invScreenSize, const glm::vec3 & edgeColor, const glm::vec3 & keyColor, const ColorArray & majorColors, const ColorArray & minorColors, bool highlightKeys);
 
+	/// Keyboard as lit 3D keys on the floor of the 3D view, from the front edge (z = 0) back to z = -depth.
+	void drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, const glm::mat4 & mvp, const glm::vec3 & eye, float aspect, float depth, const glm::vec3 & whiteColor, const glm::vec3 & blackColor, const ColorArray & majorColors, const ColorArray & minorColors, bool highlightKeys, float minorsWidth, float minorHeight);
+
 	void drawPedals(const std::shared_ptr<MIDIScene>& scene, float time, const glm::vec2 & invScreenSize, const State::PedalsState & state, float keyboardHeight, bool horizontalMode);
 
 	void drawWaves(const std::shared_ptr<MIDIScene>& scene, float time, const glm::vec2 & invScreenSize, const State::WaveState & state, float keyboardHeight);
@@ -55,6 +58,7 @@ private:
 	ShaderProgram _programParticules;
 	ShaderProgram _programKeyMinors;
 	ShaderProgram _programKeyMajors;
+	ShaderProgram _programKeys3D;
 	ShaderProgram _programPedals;
 	ShaderProgram _programWave;
 	ShaderProgram _programWaveNoise;
@@ -76,6 +80,10 @@ private:
 
 	GLuint _vaoWave;
 	size_t _wavePrimitiveCount;
+
+	GLuint _vaoKeys3D;
+	GLuint _boxVertices;
+	GLuint _keys3DBuffer;
 
 	GLuint _texParticles;
 	GLuint _texFont;
