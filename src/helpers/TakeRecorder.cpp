@@ -109,12 +109,11 @@ bool TakeRecorder::finish(double nowHost) {
 		return a.timestamp < b.timestamp;
 	});
 	const double length = double(_end) / _rate;
-	double last = length;
 	bool down[16][128] = {};
 	bool pedal[16] = {};
 	for(libremidi::message & m : midi) {
-		m.timestamp = sampleAt(m.timestamp) / _rate + _timing.offsetSeconds;
-		last = std::max(last, m.timestamp);
+		// Clamped to the take, so take.mid never outruns take.wav; equal times keep their order through the stable sorts.
+		m.timestamp = std::min(std::max(sampleAt(m.timestamp) / _rate + _timing.offsetSeconds, 0.0), length);
 		if(m.size() < 3) {
 			continue;
 		}
@@ -126,17 +125,17 @@ bool TakeRecorder::finish(double nowHost) {
 			pedal[channel] = m.bytes[2] >= 64;
 		}
 	}
-	// Release what is still held when the take ends; a positive offset can push a note past the length.
+	// Release what is still held when the take ends.
 	for(int channel = 0; channel < 16; ++channel) {
 		for(int note = 0; note < 128; ++note) {
 			if(down[channel][note]) {
 				midi.push_back(libremidi::message::note_off(uint8_t(channel + 1), uint8_t(note), 0));
-				midi.back().timestamp = last;
+				midi.back().timestamp = length;
 			}
 		}
 		if(pedal[channel]) {
 			midi.push_back(libremidi::message::control_change(uint8_t(channel + 1), 64, 0));
-			midi.back().timestamp = last;
+			midi.back().timestamp = length;
 		}
 	}
 
