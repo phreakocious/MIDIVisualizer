@@ -89,6 +89,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 				// End of the queue.
 				break;
 			}
+			if(_listener){ _listener(message); }
 		}
 		return;
 	}
@@ -143,6 +144,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 			// End of the queue.
 			break;
 		}
+		if(_listener){ _listener(message); }
 
 		// Store message for saving.
 		frame.messages.push_back(message);

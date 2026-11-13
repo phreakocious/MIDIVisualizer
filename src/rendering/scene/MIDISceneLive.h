@@ -8,6 +8,7 @@
 
 #include <libremidi/libremidi.hpp>
 #include <map>
+#include <functional>
 
 #define VIRTUAL_DEVICE_NAME "VIRTUAL"
 
@@ -49,6 +50,9 @@ public:
 
 	const std::string& deviceName() const;
 
+	/// Called once for every polled message, before the scene uses it.
+	void setMessageListener(std::function<void(const libremidi::message&)> listener){ _listener = std::move(listener); }
+
 	static const std::vector<std::string> & availablePorts(bool force = false);
 	
 private:
@@ -81,6 +85,7 @@ private:
 	SetOptions _currentSetOption;
 	std::string _deviceName;
 	bool _verbose = false;
+	std::function<void(const libremidi::message&)> _listener;
 
 	static libremidi::midi_in & shared();
 

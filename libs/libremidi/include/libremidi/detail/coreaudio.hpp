@@ -423,23 +423,15 @@ private:
       }
 
       // Calculate time stamp.
-      if (data.firstMessage)
-      {
-        msg.timestamp = 0.0;
-        data.firstMessage = false;
+      // Local change: absolute host seconds, not the delta RtMidi gives, to sync with audio.
+      data.firstMessage = false;
+      time = packet->timeStamp;
+      if (time == 0)
+      { // this happens when receiving asynchronous sysex messages
+        time = AudioGetCurrentHostTime();
       }
-      else
-      {
-        time = packet->timeStamp;
-        if (time == 0)
-        { // this happens when receiving asynchronous sysex messages
-          time = AudioGetCurrentHostTime();
-        }
-        time -= apiData->lastTime;
-        time = AudioConvertHostTimeToNanos(time);
-        if (!continueSysex)
-          msg.timestamp = time * 0.000000001;
-      }
+      if (!continueSysex)
+        msg.timestamp = AudioConvertHostTimeToNanos(time) * 1e-9;
 
       // Track whether any non-filtered messages were found in this
       // packet for timestamp calculation
