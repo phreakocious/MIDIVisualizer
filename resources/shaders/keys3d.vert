@@ -14,6 +14,7 @@ uniform int sets[128]; // Color set shown on each key, -1 for none.
 
 out INTERFACE {
 	vec3 pos;
+	vec3 local; // Position before the press turns the key.
 	vec3 n;
 	vec4 lightPos;
 	flat int material; // 0 white key, 1 black key, 2 case.
@@ -32,6 +33,7 @@ void main(){
 	vec3 p = vec3(v.x, c * v.y - s * dz, pivotZ + s * v.y + c * dz);
 	Out.n = vec3(n.x, c * n.y - s * n.z, s * n.y + c * n.z);
 	Out.pos = p;
+	Out.local = v;
 	Out.lightPos = lightMvp * vec4(p + shadowOffset * Out.n, 1.0);
 	// Black keys are 1, 3, 6, 8 and 10 in each octave: bits of 0x54A.
 	Out.material = isKey ? ((0x54A >> (k % 12)) & 1) : 2;

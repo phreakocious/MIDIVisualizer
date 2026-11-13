@@ -533,31 +533,54 @@ void addQuad(std::vector<GLfloat>& out, const glm::vec3 (&p)[4], const glm::vec3
 	}
 }
 
-// A key or a block of the case. The outline in (x, z) rises from y0 in walls that lean in by taper[i] per edge,
-// then a bevel of width r whose normals turn from the wall's to straight up, so the top edge reads as rounded.
-// The top is a fan from c, which must see the whole top outline.
-void addBlock(std::vector<GLfloat>& out, const std::vector<glm::vec2>& o, const std::vector<float>& taper, float r, float y0, float h, const glm::vec2& c, float note){
+// One level of a block's side: a height, and how far each edge of the outline has moved in there (out, if negative).
+struct Ring {
+	float y;
+	std::vector<float> inset;
+};
+
+std::vector<float> plus(std::vector<float> v, float d){
+	for(float& x : v){
+		x += d;
+	}
+	return v;
+}
+
+// A key or a block of the case: the outline in (x, z) swept up through rings, bottom first. Each face between two rings
+// is flat; the last one is a bevel whose normals turn from the face below to straight up, so the top edge reads as rounded.
+// Two rings at one height make a ledge. The top is a fan from c, which must see the whole top outline.
+void addBlock(std::vector<GLfloat>& out, const std::vector<glm::vec2>& o, const std::vector<Ring>& rings, const glm::vec2& c, float note){
+	assert(rings.size() >= 3);
 	const size_t n = o.size();
 	const std::vector<glm::vec2> normals = outwardNormals(o);
-	std::vector<float> topInset(taper);
-	for(float& t : topInset){
-		t += r;
-	}
-	const std::vector<glm::vec2> mid = insetOutline(o, normals, taper);
-	const std::vector<glm::vec2> top = insetOutline(o, normals, topInset);
 	const glm::vec3 up(0.0f, 1.0f, 0.0f);
-	const float wallHeight = h - r - y0;
+	std::vector<glm::vec3> below(n, up);
+	std::vector<glm::vec2> p0 = insetOutline(o, normals, rings[0].inset);
+	for(size_t k = 1; k < rings.size(); ++k){
+		const std::vector<glm::vec2> p1 = insetOutline(o, normals, rings[k].inset);
+		const float y0 = rings[k - 1].y;
+		const float y1 = rings[k].y;
+		const bool bevel = k + 1 == rings.size();
+		for(size_t i = 0; i < n; ++i){
+			const float d = rings[k].inset[i] - rings[k - 1].inset[i];
+			// An edge that neither rises nor moves has no face here.
+			if(y1 == y0 && d == 0.0f){
+				continue;
+			}
+			const size_t j = (i + 1) % n;
+			const glm::vec3 wn = glm::normalize(glm::vec3(normals[i].x * (y1 - y0), d, normals[i].y * (y1 - y0)));
+			const glm::vec3 nb = bevel ? below[i] : wn;
+			const glm::vec3 nt = bevel ? up : wn;
+			addQuad(out, {{p0[i].x, y0, p0[i].y}, {p0[j].x, y0, p0[j].y}, {p1[j].x, y1, p1[j].y}, {p1[i].x, y1, p1[i].y}}, {nb, nb, nt, nt}, note);
+			below[i] = wn;
+		}
+		p0 = p1;
+	}
+	const float h = rings.back().y;
 	for(size_t i = 0; i < n; ++i){
-		const size_t j = (i + 1) % n;
-		const glm::vec3 wn = glm::normalize(glm::vec3(normals[i].x * wallHeight, taper[i], normals[i].y * wallHeight));
-		const glm::vec3 b0(o[i].x, y0, o[i].y), b1(o[j].x, y0, o[j].y);
-		const glm::vec3 m0(mid[i].x, h - r, mid[i].y), m1(mid[j].x, h - r, mid[j].y);
-		const glm::vec3 t0(top[i].x, h, top[i].y), t1(top[j].x, h, top[j].y);
-		addQuad(out, {b0, b1, m1, m0}, {wn, wn, wn, wn}, note);
-		addQuad(out, {m0, m1, t1, t0}, {wn, wn, up, up}, note);
 		addVertex(out, glm::vec3(c.x, h, c.y), up, note);
-		addVertex(out, t0, up, note);
-		addVertex(out, t1, up, note);
+		addVertex(out, glm::vec3(p0[i].x, h, p0[i].y), up, note);
+		addVertex(out, glm::vec3(p0[(i + 1) % n].x, h, p0[(i + 1) % n].y), up, note);
 	}
 }
 
@@ -571,6 +594,11 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 	const float blackTop = whiteTop + 0.5f * slot;
 	const float blackWidth = 0.9f * slot * minorsWidth;
 	const float blackFront = -depth + minorHeight * depth;
+	// A white key's top is a cap whose front overhangs the key's face a little.
+	const float lip = 0.03f * slot;
+	const float lipBottom = whiteTop - 0.08f * slot;
+	const float whiteBevel = 0.04f * slot;
+	const float blackBevel = 0.07f * slot;
 	// A key pivots on the balance rail, well behind its visible part; its front goes down 10 mm.
 	const float pivotZ = -1.5f * depth;
 	const float pressAngle = 0.42f * slot / -pivotZ;
@@ -601,6 +629,7 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 			shown[note] = std::abs(blackX[note]) < aspect - 0.5f * slot;
 		}
 		std::vector<GLfloat> mesh;
+		const std::vector<float> straight(4, 0.0f);
 		for(int note = 0; note < 128; ++note){
 			if(!shown[note]){
 				continue;
@@ -609,10 +638,11 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 			if(isBlack[k]){
 				const float x0 = blackX[note] - 0.5f * blackWidth;
 				const float x1 = blackX[note] + 0.5f * blackWidth;
-				// Sides narrow toward the top; the front slopes back.
+				// Straight in the slot between the white keys; above them the sides narrow and the front slopes back.
 				const std::vector<glm::vec2> outline = {{x0, -depth}, {x1, -depth}, {x1, blackFront}, {x0, blackFront}};
-				const std::vector<float> taper = {0.0f, 0.1f * slot, 0.3f * slot, 0.1f * slot};
-				addBlock(mesh, outline, taper, 0.1f * slot, 0.0f, blackTop, {blackX[note], 0.5f * (blackFront - depth)}, float(note));
+				const float side = 0.15f * blackWidth;
+				const std::vector<float> taper = {0.0f, side, 0.22f * slot, side};
+				addBlock(mesh, outline, {{0.0f, straight}, {whiteTop, straight}, {blackTop - blackBevel, taper}, {blackTop, plus(taper, blackBevel)}}, {blackX[note], 0.5f * (blackFront - depth)}, float(note));
 				continue;
 			}
 			const int white = (note / 12) * 7 + whiteIndex[k] - int(_minKeyMajor);
@@ -630,12 +660,16 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 			if(b0 > x0){
 				outline.insert(outline.end(), {{b0, notchZ}, {x0, notchZ}});
 			}
-			addBlock(mesh, outline, std::vector<float>(outline.size(), 0.0f), 0.08f * slot, 0.0f, whiteTop, {0.5f * (b0 + b1), 0.5f * notchZ}, float(note));
+			// Edge 0 is the front: the cap's lip.
+			const std::vector<float> body(outline.size(), 0.0f);
+			std::vector<float> cap(body);
+			cap[0] = -lip;
+			addBlock(mesh, outline, {{0.0f, body}, {lipBottom, body}, {lipBottom, cap}, {whiteTop - whiteBevel, cap}, {whiteTop, plus(cap, whiteBevel)}}, {0.5f * (b0 + b1), 0.5f * notchZ}, float(note));
 		}
 		const glm::vec3 up(0.0f, 1.0f, 0.0f);
 		addQuad(mesh, {{-aspect, bedY, 0.0f}, {aspect, bedY, 0.0f}, {aspect, bedY, -depth}, {-aspect, bedY, -depth}}, {up, up, up, up}, -1.0f);
 		const std::vector<glm::vec2> slip = {{-aspect, gap}, {aspect, gap}, {aspect, slipFront}, {-aspect, slipFront}};
-		addBlock(mesh, slip, std::vector<float>(4, 0.0f), 0.08f * slot, slipBottom, slipTop, {0.0f, 0.5f * (gap + slipFront)}, -1.0f);
+		addBlock(mesh, slip, {{slipBottom, straight}, {slipTop - 0.08f * slot, straight}, {slipTop, plus(straight, 0.08f * slot)}}, {0.0f, 0.5f * (gap + slipFront)}, -1.0f);
 
 		glBindBuffer(GL_ARRAY_BUFFER, _keys3DVertices);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mesh.size(), mesh.data(), GL_STATIC_DRAW);
@@ -687,6 +721,8 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 	_programKeys3D.uniform("eye", eye);
 	_programKeys3D.uniform("whiteTop", whiteTop);
 	_programKeys3D.uniform("gap", gap);
+	_programKeys3D.uniform("lip", lip);
+	_programKeys3D.uniform("lipBottom", lipBottom);
 	_programKeys3D.uniform("whiteColor", whiteColor);
 	_programKeys3D.uniform("blackColor", blackColor);
 	_programKeys3D.uniforms("majorColor", majorColors.size(), majorColors.data());

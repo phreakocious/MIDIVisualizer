@@ -2,6 +2,7 @@
 
 in INTERFACE {
 	vec3 pos;
+	vec3 local; // Position before the press turns the key.
 	vec3 n;
 	vec4 lightPos;
 	flat int material; // 0 white key, 1 black key, 2 case.
@@ -16,6 +17,8 @@ uniform sampler2DShadow shadowMap;
 uniform vec3 eye;
 uniform float whiteTop; // Height of the white keys' tops at rest.
 uniform float gap; // Width of the slots between keys.
+uniform float lip; // How far a white key's cap overhangs its front.
+uniform float lipBottom; // Height of the cap's underside.
 uniform vec3 lightDir;
 uniform vec3 whiteColor;
 uniform vec3 blackColor;
@@ -58,6 +61,10 @@ void main(){
 	float occlusion = 1.0;
 	if(In.material != 2 && n.y < 0.7 && !(In.material == 0 && n.z > 0.5)){
 		occlusion = 1.0 / (1.0 + 2.0 * max(whiteTop - In.pos.y, 0.0) / gap);
+	}
+	// Just under the cap's lip, a white key's front sees less of the room: a thin dark line, as on a real key.
+	if(In.material == 0 && n.z > 0.5 && In.local.z < 0.5 * lip){
+		occlusion = mix(0.5, 1.0, smoothstep(0.0, 3.0 * lip, lipBottom - In.local.y));
 	}
 	// Scaled so a lit top face shows the key's own color.
 	float diffuse = max(dot(n, lightDir), 0.0) / lightDir.y * shadow;
