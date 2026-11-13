@@ -102,6 +102,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 			particle.note = -1;
 			particle.set = -1;
 			particle.duration = particle.start = particle.elapsed = 0.0f;
+			particle.gain = 1.0f;
 		}
 	}
 
@@ -210,6 +211,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 						particle.note = note;
 						particle.set = int(newNote.set);
 						particle.elapsed = 0.0f;
+						particle.gain = newNote.gain;
 						break;
 					}
 				}
@@ -296,6 +298,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 		// Update for notes currently playins.
 		if(note.start <= time && note.start+note.duration >= time){
 			_actives[noteId.note] = int(note.set);
+			_activeGains[noteId.note] = note.gain;
 		}
 		// Detect notes that started at this frame.
 		if(note.start > _previousTime && note.start <= time){
@@ -308,6 +311,7 @@ void MIDISceneLive::updatesActiveNotes(double time, double speed, const FilterOp
 					particle.note = noteId.note;
 					particle.set = int(note.set);
 					particle.elapsed = 0.0f;
+					particle.gain = note.gain;
 					break;
 				}
 			}

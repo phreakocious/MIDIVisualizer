@@ -89,6 +89,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 			particle.note = -1;
 			particle.set = -1;
 			particle.duration = particle.start = particle.elapsed = 0.0f;
+			particle.gain = 1.0f;
 		}
 	}
 	// Get notes actives.
@@ -110,6 +111,7 @@ void MIDISceneFile::updatesActiveNotes(double time, double speed, const FilterOp
 					particle.note = i;
 					particle.set = note.set;
 					particle.elapsed = 0.0f;
+					particle.gain = gainFor(short(note.velocity));
 					break;
 				}
 			}

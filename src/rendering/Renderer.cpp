@@ -335,7 +335,12 @@ void Renderer::drawParticles(const std::shared_ptr<MIDIScene>& scene, float time
 			_programParticules.uniform("time", particle.elapsed);
 			_programParticules.uniform("duration", particle.duration);
 			_programParticules.uniform("channel", particle.set);
-			glDrawElementsInstanced(GL_TRIANGLES, int(_quadPrimitiveCount), GL_UNSIGNED_INT, (void*)0, state.count);
+			// Louder notes throw more particles, further.
+			const float gain = glm::mix(1.0f, particle.gain, state.velocityStrength);
+			_programParticules.uniform("expansionFactor", state.expansion * gain);
+			// At least one particle, so soft notes still emit with a small count.
+			const int count = state.count < 1 ? state.count : (std::max)(1, int(std::round(float(state.count) * gain)));
+			glDrawElementsInstanced(GL_TRIANGLES, int(_quadPrimitiveCount), GL_UNSIGNED_INT, (void*)0, count);
 		}
 	}
 	

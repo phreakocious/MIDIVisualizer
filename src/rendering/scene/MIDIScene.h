@@ -24,6 +24,7 @@ public:
 		float duration = 0.0f;
 		float start = 1000000.0f;
 		float elapsed = 0.0f;
+		float gain = 1.0f; ///< Velocity gain of the note that started it.
 	};
 
 	struct GPUNote {

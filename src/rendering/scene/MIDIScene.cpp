@@ -28,6 +28,7 @@ void MIDIScene::resetParticles() {
 		particle.note = -1;
 		particle.set = -1;
 		particle.duration = particle.start = particle.elapsed = 0.0f;
+		particle.gain = 1.0f;
 	}
 }
 
