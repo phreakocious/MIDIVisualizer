@@ -277,7 +277,7 @@ void Viewer::drawScene(bool transparentBG){
 
 	_renderFramebuffer->unbind();
 
-	// shortcut: test of the 3D look, the flat frame laid on a floor in perspective; no FXAA on this path.
+	// shortcut: test of the 3D look, the flat frame laid on a floor in perspective; only the keyboard is real 3D.
 	if(_state.trail3D){
 		// Mipmaps and anisotropic filtering keep the far end from shimmering.
 		glBindTexture(GL_TEXTURE_2D, _renderFramebuffer->textureId());
@@ -319,7 +319,7 @@ void Viewer::drawScene(bool transparentBG){
 		if(_state.showKeyboard){
 			const ColorArray & majColors = _state.keyboard.customKeyColors ? _state.keyboard.majorColor : _state.notes.majorColors;
 			const ColorArray & minColors = _state.keyboard.customKeyColors ? _state.keyboard.minorColor : _state.notes.minorColors;
-			_renderer.drawKeyboard3D(_scene, mvp, eye, aspect, -kz, _state.keyboard.backColor, _state.keyboard.edgeColor, majColors, minColors, _state.keyboard.highlightKeys, _state.background.minorsWidth, _state.keyboard.minorHeight);
+			_renderer.drawKeyboard3D(_scene, _timer, mvp, eye, aspect, -kz, _state.keyboard.backColor, _state.keyboard.edgeColor, majColors, minColors, _state.keyboard.highlightKeys, _state.background.minorsWidth, _state.keyboard.minorHeight);
 		}
 		_finalFramebuffer->unbind();
 		// Smooth the key edges: FXAA from the final image into the render one, then copy back.
