@@ -614,7 +614,9 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 	if(state.hLines || state.digits){
 
-		const float currentAbscisse = time/float(scene->secondsPerMeasure());
+		// Bar 0 starts at the scene's grid origin.
+		const float gridTime = time - float(scene->gridOrigin());
+		const float currentAbscisse = gridTime/float(scene->secondsPerMeasure());
 
 		// Find the measure at the bottom of the screen if forward, top of the screen if bottom
 		// TODO: (MV) explain the magic values.
@@ -632,7 +634,7 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 
 		const float nextBarDeltaCoord = direction * magicValue1;
 
-		float firstBarCoord = direction * (firstMeasureTime - time) * measureScale + keyboardPos;
+		float firstBarCoord = direction * (firstMeasureTime - gridTime) * measureScale + keyboardPos;
 		
 		// Corrective step.
 		// while the next bar is not on screen, keep stepping forwards.

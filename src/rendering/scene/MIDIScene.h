@@ -49,6 +49,10 @@ public:
 
 	virtual double secondsPerMeasure() const;
 
+	virtual double tempoBPM() const;
+
+	virtual double gridOrigin() const;
+
 	virtual int notesCount() const;
 
 	virtual int tracksCount() const;

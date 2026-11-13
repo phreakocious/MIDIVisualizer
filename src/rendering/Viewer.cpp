@@ -213,7 +213,7 @@ SystemAction Viewer::draw(float currentTime) {
 	// playback is disabled.
 	_timer = _shouldPlay ? (currentTime - _timerStart) : _timer;
 
-	if (_shouldPlay && _state.loop && _timer >= _scene->duration()) {
+	if (_shouldPlay && _state.loop && _timer * _state.scrollSpeed >= _scene->duration()) {
 		reset();
 	}
 
@@ -527,16 +527,41 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 				ImGui::BeginDisabled();
 			}
 			ImGuiSameLine(COLUMN_SIZE);
-			if(ImGui::SliderFloat("Speed", &_state.scrollSpeed, 0.1f, 5.0f, "%.1fx")){
-				_state.scrollSpeed = (std::max)(0.01f, _state.scrollSpeed);
+			float speed = _state.scrollSpeed;
+			if(ImGui::SliderFloat("Speed", &speed, 0.1f, 5.0f, "%.2fx")){
+				setPlaybackSpeed(speed, currentTime);
 			}
 			if(_liveplay){
 				ImGui::EndDisabled();
 				if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
 					ImGui::SetTooltip("Not available in liveplay");
 				}
+
+				const auto liveScene = std::dynamic_pointer_cast<MIDISceneLive>(_scene);
+				if(liveScene){
+					float bpm = float(liveScene->tempoBPM());
+					if(ImGui::InputFloat("Tempo", &bpm, 1.0f, 10.0f, "%.1f BPM")){
+						liveScene->setTempo(bpm);
+					}
+					ImGui::helpTooltip("Tempo of the bar grid and of saved recordings");
+					ImGuiSameLine(COLUMN_SIZE);
+					glm::ivec2 sig = liveScene->signature();
+					if(ImGui::InputInt2("Signature", &sig[0])){
+						liveScene->setSignature(sig[0], sig[1]);
+					}
+					ImGui::helpTooltip("Time signature of the bar grid and of saved recordings");
+				}
 			} else {
 				ImGui::helpTooltip(s_scroll_speed_dsc);
+
+				const float fileBPM = float(_scene->tempoBPM());
+				float bpm = fileBPM * _state.scrollSpeed;
+				if(ImGui::InputFloat("Tempo", &bpm, 1.0f, 10.0f, "%.1f BPM")){
+					setPlaybackSpeed(bpm / fileBPM, currentTime);
+				}
+				ImGui::helpTooltip("Playback tempo at the start of the file; sets Speed");
+				ImGuiSameLine(COLUMN_SIZE);
+				ImGui::TextDisabled("file: %.1f BPM", fileBPM);
 			}
 			ImGui::PopItemWidth();
 
@@ -2227,6 +2252,15 @@ void Viewer::reset() {
 	_timer = -_state.prerollTime;
 	_timerStart = DEBUG_SPEED * float(glfwGetTime()) + (_shouldPlay ? _state.prerollTime : 0.0f);
 	_scene->resetParticles();
+}
+
+void Viewer::setPlaybackSpeed(float speed, float currentTime) {
+	speed = (std::max)(0.01f, speed);
+	// Song time is _timer * speed: rescale _timer so the playhead stays put.
+	// shortcut: wall-clock effects (background scroll, waves) jump once per change; give the song its own clock if that shows.
+	_timer *= _state.scrollSpeed / speed;
+	_timerStart = currentTime - _timer;
+	_state.scrollSpeed = speed;
 }
 
 void Viewer::setState(const State & state){

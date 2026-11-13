@@ -153,6 +153,8 @@ private:
 	
 	void reset();
 
+	void setPlaybackSpeed(float speed, float currentTime);
+
 	void startRecording();
 
 	void updateSizes();

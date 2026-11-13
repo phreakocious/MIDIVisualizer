@@ -24,6 +24,8 @@ public:
 
 	double secondsPerMeasure() const override;
 
+	double tempoBPM() const override;
+
 	int notesCount() const override;
 	
 	int tracksCount() const override;

@@ -47,6 +47,14 @@ double MIDIScene::secondsPerMeasure() const {
 	return 1.0;
 }
 
+double MIDIScene::tempoBPM() const {
+	return 120.0;
+}
+
+double MIDIScene::gridOrigin() const {
+	return 0.0;
+}
+
 int MIDIScene::notesCount() const {
 	return 0;
 }

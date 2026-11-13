@@ -127,6 +127,10 @@ double MIDISceneFile::secondsPerMeasure() const {
 	return _midiFile.secondsPerMeasure();
 }
 
+double MIDISceneFile::tempoBPM() const {
+	return _midiFile.tempoBPM();
+}
+
 int MIDISceneFile::notesCount() const {
 	return _midiFile.notesCount();
 }

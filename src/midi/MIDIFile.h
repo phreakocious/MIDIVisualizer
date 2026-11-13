@@ -27,6 +27,9 @@ public:
 	
 	const double & secondsPerMeasure() const { return _secondsPerMeasure; }
 
+	// Quarter notes per minute at the start of the file.
+	double tempoBPM() const { return _tempos.empty() ? 120.0 : 60000000.0 / double(_tempos[0].tempo); }
+
 	const double & duration() const { return _duration; }
 
 	const int & notesCount() const { return _notesCount; }
