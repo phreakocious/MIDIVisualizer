@@ -1055,7 +1055,6 @@ void Viewer::showParticleOptions(){
 		_state.particles.count = glm::clamp(_state.particles.count, 1, 512);
 	}
 	ImGui::helpTooltip(s_particles_count_dsc);
-	ImGuiSameLine(COLUMN_SIZE);
 	if(ImGui::SliderPercent("Velocity##particles", &_state.particles.velocityStrength, 0.0f, 1.0f)){
 		_state.particles.velocityStrength = glm::clamp(_state.particles.velocityStrength, 0.0f, 1.0f);
 	}
