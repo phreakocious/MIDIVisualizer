@@ -107,13 +107,18 @@ void Renderer::renderSetup(){
 	// Notes data part 1
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), NULL);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), NULL);
 	glVertexAttribDivisor(1, 1);
 	// Notes data part 2
 	glEnableVertexAttribArray(2);
 	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
-	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void*)(4 * sizeof(GLfloat)));
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(4 * sizeof(GLfloat)));
 	glVertexAttribDivisor(2, 1);
+	// Notes data part 3: velocity gain
+	glEnableVertexAttribArray(3);
+	glBindBuffer(GL_ARRAY_BUFFER, _notesDataBuffer);
+	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (void*)(5 * sizeof(GLfloat)));
+	glVertexAttribDivisor(3, 1);
 	// Indices
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _quadIndices);
 	glBindVertexArray(0);
@@ -343,6 +348,7 @@ void Renderer::drawNotes(const std::shared_ptr<MIDIScene>& scene, float time, co
 	_programNotes.uniform("reverseMode", reverseScroll);
 	_programNotes.uniform("edgeWidth", state.edgeWidth);
 	_programNotes.uniform("edgeBrightness", state.edgeBrightness);
+	_programNotes.uniform("velocityStrength", state.velocityStrength);
 
 	_programNotes.uniform("texturesScale", glm::vec2{state.majorTexScale, state.minorTexScale});
 	_programNotes.uniform("texturesStrength", glm::vec2{state.majorTexAlpha, state.minorTexAlpha});

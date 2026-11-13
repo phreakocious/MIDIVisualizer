@@ -38,6 +38,8 @@ public:
 
 private:
 
+	float gainFor(short velocity) const;
+
 	MIDIFile _midiFile;
 	std::string _filePath;
 	double _previousTime = 0.0;

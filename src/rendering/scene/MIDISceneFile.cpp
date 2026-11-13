@@ -58,6 +58,7 @@ void MIDISceneFile::updateVisibleNotes( const FilterOptions& filter )
 		data.duration = float( note.duration );
 		data.isMinor = 0.0f;
 		data.set = float( note.set );
+		data.gain = gainFor( note.velocity );
 	}
 
 	for( size_t i = 0; i < minorCount; ++i )
@@ -69,6 +70,7 @@ void MIDISceneFile::updateVisibleNotes( const FilterOptions& filter )
 		data.duration = float( note.duration );
 		data.isMinor = 1.0f;
 		data.set = float( note.set );
+		data.gain = gainFor( note.velocity );
 	}
 	// Upload to the GPU.
 	assert( totalCount < ( 1 << 31 ) );
@@ -125,6 +127,11 @@ double MIDISceneFile::duration() const {
 
 double MIDISceneFile::secondsPerMeasure() const {
 	return _midiFile.secondsPerMeasure();
+}
+
+float MIDISceneFile::gainFor(short velocity) const {
+	// A file with a single velocity carries no dynamics: draw it as today.
+	return _midiFile.singleVelocity() ? 1.0f : velocityGain(velocity);
 }
 
 double MIDISceneFile::tempoBPM() const {

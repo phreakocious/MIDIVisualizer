@@ -32,6 +32,7 @@ public:
 		float duration = 0.0f;
 		float isMinor = 0.0f;
 		float set = 0.0f;
+		float gain = 1.0f; ///< Velocity gain, 1 is neutral.
 	};
 
 
