@@ -102,6 +102,8 @@ set(Sources
 	"src/helpers/WavWriter.cpp"
 	"src/helpers/WavWriter.h"
 	"src/helpers/TakeClock.h"
+	"src/helpers/TakeRecorder.cpp"
+	"src/helpers/TakeRecorder.h"
 	"src/helpers/Configuration.cpp"
 	"src/helpers/Configuration.h"
 	"src/helpers/ImGuiStyle.cpp"
