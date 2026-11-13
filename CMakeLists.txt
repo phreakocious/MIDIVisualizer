@@ -113,6 +113,8 @@ set(Sources
 	"src/midi/MIDIUtils.h"
 	"src/midi/MIDIBase.cpp"
 	"src/midi/MIDIBase.h"
+	"src/midi/TakeMidi.cpp"
+	"src/midi/TakeMidi.h"
 	"src/rendering/Framebuffer.cpp"
 	"src/rendering/Framebuffer.h"
 	"src/rendering/scene/MIDIScene.cpp"
