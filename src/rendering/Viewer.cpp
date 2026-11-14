@@ -259,8 +259,10 @@ SystemAction Viewer::draw(float currentTime) {
 			resize(_backbufferSize[0], _backbufferSize[1]);
 			if(!_takeVideoPath.empty()){
 				System::revealFile(_takeVideoPath);
-				if(!_takeDeviceName.empty()){
-					connectDevice(_takeDeviceName);
+				// Live notes rise again at once, as after Start in the devices popup.
+				if(!_takeDeviceName.empty() && connectDevice(_takeDeviceName)){
+					_shouldPlay = true;
+					_timerStart = currentTime;
 				}
 				_takeVideoPath.clear();
 			}
