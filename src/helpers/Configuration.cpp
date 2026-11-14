@@ -113,6 +113,31 @@ Configuration::Configuration(const std::string& path, const std::vector<std::str
 			if(name == "device" && vals.size() >= 1){
 				lastMidiDevice = join(vals, " ");
 			}
+			if(name == "take" && vals.size() >= 1){
+				takeFolder = join(vals, " ");
+			}
+		}
+		// Take options
+		{
+			if(name == "take-audio-device" && vals.size() >= 1){
+				takes.audioDevice = join(vals, " ");
+			}
+			if(name == "take-audio-channel" && vals.size() >= 1){
+				takes.audioFirstChannel = (std::max)(Configuration::parseInt(vals[0]), 1);
+			}
+			if(name == "take-audio-offset" && vals.size() >= 1){
+				takes.audioOffsetMs = Configuration::parseFloat(vals[0]);
+			}
+			if(name == "take-video-size" && vals.size() >= 2){
+				takes.videoSize[0] = glm::clamp(Configuration::parseInt(vals[0]), 128, 16384);
+				takes.videoSize[1] = glm::clamp(Configuration::parseInt(vals[1]), 128, 16384);
+			}
+			if(name == "take-video-framerate" && vals.size() >= 1){
+				takes.videoFramerate = (std::max)(Configuration::parseInt(vals[0]), 1);
+			}
+			if(name == "take-notes-rise"){
+				takes.notesRise = vals.empty() || Configuration::parseBool(vals[0]);
+			}
 		}
 		// Export options
 		{
@@ -249,6 +274,16 @@ void Configuration::save(const std::string& path){
 		outFile << "device " << lastMidiDevice << "\n";
 	}
 
+	// Take options
+	if(!takes.audioDevice.empty()){
+		outFile << "take-audio-device " << takes.audioDevice << "\n";
+	}
+	outFile << "take-audio-channel " << takes.audioFirstChannel << "\n";
+	outFile << "take-audio-offset " << takes.audioOffsetMs << "\n";
+	outFile << "take-video-size " << takes.videoSize[0] << " " << takes.videoSize[1] << "\n";
+	outFile << "take-video-framerate " << takes.videoFramerate << "\n";
+	outFile << "take-notes-rise " << takes.notesRise << "\n";
+
 	// Window options
 	outFile << "size " << windowSize[0] << " " << windowSize[1] << "\n";
 	outFile << "position " << windowPos[0] << " " << windowPos[1] << "\n";
@@ -275,6 +310,7 @@ void Configuration::printHelp(){
 		{"midi", "path to a MIDI file to load"},
 		{"device", "name of a MIDI device to start a live session to (or VIRTUAL to act as a virtual device)"},
 		{"config", "path to a configuration INI file"},
+		{"take", "render a take folder's take.mid and take.wav to take.mp4, then quit"},
 		{"size", "dimensions of the window (--size W H)"},
 		{"position", "position of the window (--position X Y)"},
 		{"fullscreen", "start in fullscreen (1 or 0 to enable/disable)"},

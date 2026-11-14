@@ -41,5 +41,8 @@ public:
 	static std::string getApplicationDataDirectory();
 
 	static void forceLocale();
+
+	/** Show a file in the system's file browser (only on macOS for now). */
+	static void revealFile(const std::string& path);
 	
 };

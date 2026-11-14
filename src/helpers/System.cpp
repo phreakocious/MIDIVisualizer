@@ -158,3 +158,15 @@ void System::forceLocale(){
 	// Helps managing configuration files loading/saving.
 	std::setlocale(LC_ALL, "C");
 }
+
+void System::revealFile(const std::string& path){
+#ifdef __APPLE__
+	// Single-quoted for the shell; an embedded quote closes, escapes and reopens.
+	std::string command = "open -R '";
+	for(const char c : path){
+		command += c == '\'' ? std::string("'\\''") : std::string(1, c);
+	}
+	command += "'";
+	std::system(command.c_str());
+#endif
+}

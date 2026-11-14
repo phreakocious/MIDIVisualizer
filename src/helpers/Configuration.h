@@ -16,7 +16,7 @@ std::string join(const std::vector<std::string>& strs, const std::string& delim)
 struct Export {
 
 	enum class Format : int {
-		   PNG = 0, MPEG2 = 1, MPEG4 = 2, PRORES = 3
+		   PNG = 0, MPEG2 = 1, MPEG4 = 2, PRORES = 3, H264 = 4
 	};
 
 	std::string path;
@@ -27,6 +27,15 @@ struct Export {
 	bool fixPremultiply = false;
 	bool alphaBackground = false;
 
+};
+
+struct TakeSettings {
+	std::string audioDevice;
+	int audioFirstChannel = 1;
+	float audioOffsetMs = 0.0f;
+	glm::ivec2 videoSize = {1920, 1080};
+	int videoFramerate = 60;
+	bool notesRise = false;
 };
 
 class Configuration {
@@ -72,9 +81,11 @@ public:
 	bool useTransparency = false;
 	bool showVersion = false;
 	bool showHelp = false;
+	TakeSettings takes;
 
 	// Export settings (won't be saved)
 	Export exporting;
+	std::string takeFolder;
 
 private:
 

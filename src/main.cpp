@@ -316,6 +316,10 @@ int main( int argc, char** argv) {
 				// Quit.
 				performAction(SystemAction::QUIT, window, frame);
 			}
+		} else if(!config.takeFolder.empty()){
+			if(!viewer.makeTakeVideo(config.takeFolder, true)){
+				performAction(SystemAction::QUIT, window, frame);
+			}
 		}
 
 		if(config.fullscreen){

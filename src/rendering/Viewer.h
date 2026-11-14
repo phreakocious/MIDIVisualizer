@@ -63,6 +63,9 @@ public:
 	/// Directly start recording.
 	bool startDirectRecording(const Export& exporting, const glm::vec2 & size);
 
+	/// Render a take folder's take.mid and take.wav to take.mp4.
+	bool makeTakeVideo(const std::string& folder, bool quitAfter);
+
 	void setGUIScale(float scale);
 
 	void updateConfiguration(Configuration& config);
@@ -155,7 +158,7 @@ private:
 
 	void setPlaybackSpeed(float speed, float currentTime);
 
-	void startRecording();
+	void startRecording(float preroll, float duration);
 
 	void updateSizes();
 
@@ -209,6 +212,9 @@ private:
 	bool _showParticleEditor = false;
 	bool _showPedalsEditor = false;
 	bool _exitAfterRecording = false;
+	TakeSettings _takes;
+	std::string _takeDeviceName;
+	std::string _takeVideoPath;
 	bool _fullscreen = false;
 	bool _liveplay = false;
 	bool _useTransparency = false;

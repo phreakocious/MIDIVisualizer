@@ -1,5 +1,6 @@
 #include "Recorder.h"
 #include "System.h"
+#include "WavWriter.h"
 #include "../rendering/State.h"
 #include "../helpers/ImGuiStyle.h"
 
@@ -20,6 +21,7 @@ extern "C" {
 	#include <libavformat/avio.h>
 	#include <libswscale/swscale.h>
 	#include <libavutil/opt.h>
+	#include <libavutil/channel_layout.h>
 }
 #endif
 
@@ -141,6 +143,10 @@ Recorder::Recorder(){
 			av_register_all();
 			avcodec_register_all();
 		#endif
+		// Apple's encoder only, found by name: AV_CODEC_ID_H264 can resolve to the GPL libx264.
+		if(avcodec_find_encoder_by_name("h264_videotoolbox")){
+			_formats.push_back({"H264", "mp4", Export::Format::H264});
+		}
 	#endif
 
 	// This implements a very basic thread pool.
@@ -208,6 +214,10 @@ void Recorder::record(const std::shared_ptr<Framebuffer> & frame){
 #else
 		writeFrameToVideo( &_savingBuffers[buffIndex], _size, _config.alphaBackground, _config.fixPremultiply, _frames[buffIndex], _swsContexts[buffIndex], _codecCtx, this);
 #endif
+		if(_audioCtx){
+			// shortcut: audio starts at scene time 0, which holds because takes export without preroll; a preroll would need leading silence.
+			encodeAudio(int64_t(double(_currentTime + 1.0f / float(_config.framerate)) * _audioCtx->sample_rate));
+		}
 #endif
 	}
 
@@ -359,8 +369,13 @@ void Recorder::start(bool verbose) {
 	_currentFrame = 0;
 
 	if (_config.format != Export::Format::PNG) {
-		initVideo(_config.path, _config.format, verbose);
+		// A failed setup ends the export at once: recording would use the freed contexts.
+		if(!initVideo(_config.path, _config.format, verbose)){
+			freeVideo();
+			_currentFrame = _framesCount;
+		}
 	}
+	_audioPath.clear();
 	_startTime = std::chrono::high_resolution_clock::now();
 
 	for(unsigned int i = 0; i < _savingThreads.size(); ++i){
@@ -437,6 +452,10 @@ bool Recorder::setParameters(const Export& exporting){
 	return true;
 }
 
+void Recorder::setAudio(const std::string& wavPath){
+	_audioPath = wavPath;
+}
+
 bool Recorder::videoExportSupported(){
 #ifdef MIDIVIZ_SUPPORT_VIDEO
 	return true;
@@ -476,11 +495,12 @@ bool Recorder::initVideo(const std::string & path, Export::Format format, bool v
 		{Export::Format::MPEG2, {AV_CODEC_ID_MPEG2VIDEO, AV_PIX_FMT_YUV422P}},
 		{Export::Format::MPEG4, {AV_CODEC_ID_MPEG4, AV_PIX_FMT_YUV420P}},
 		{Export::Format::PRORES, {AV_CODEC_ID_PRORES, AV_PIX_FMT_YUVA444P10}},
+		{Export::Format::H264, {AV_CODEC_ID_H264, AV_PIX_FMT_YUV420P}},
 	};
 
 	// Setup codec.
 	const auto & outFormat = opts.at(format);
-	_codec = avcodec_find_encoder(outFormat.avid);
+	_codec = format == Export::Format::H264 ? avcodec_find_encoder_by_name("h264_videotoolbox") : avcodec_find_encoder(outFormat.avid);
 	if(!_codec){
 		std::cerr << "[VIDEO]: Unable to find encoder." << std::endl;
 		return false;
@@ -517,6 +537,10 @@ bool Recorder::initVideo(const std::string & path, Export::Format format, bool v
 		//_codecCtx->global_quality = FF_QP2LAMBDA * 4;
 		av_opt_set_int(_codecCtx->priv_data, "qscale", 4, 0);
 		av_opt_set_int(_codecCtx->priv_data, "bits_per_mb", 8000, 0);
+	}
+	// Hardware first, else Apple's software encoder: a Mac without Quick Sync or a supported GPU has no hardware one.
+	if(format == Export::Format::H264){
+		av_opt_set_int(_codecCtx->priv_data, "allow_sw", 1, 0);
 	}
 
 	AVDictionary * codecParams = nullptr;
@@ -558,6 +582,72 @@ bool Recorder::initVideo(const std::string & path, Export::Format format, bool v
 		_frames[i] = frame;
 	}
 
+	if(!_audioPath.empty()){
+		int rate = 0;
+		int64_t dataOffset = 0;
+		if(!WavWriter::readInfo(_audioPath, rate, _wavChannels, _wavFrames, dataOffset) || rate <= 0){
+			std::cerr << "[VIDEO]: Unable to read audio from " << _audioPath << "." << std::endl;
+			return false;
+		}
+		_wav.open(_audioPath, std::ios::binary);
+		_wav.seekg(dataOffset);
+		if(!_wav){
+			std::cerr << "[VIDEO]: Unable to open audio file " << _audioPath << "." << std::endl;
+			return false;
+		}
+		// The native encoder, by name: AV_CODEC_ID_AAC can resolve to another one.
+		const AVCodec * audioCodec = avcodec_find_encoder_by_name("aac");
+		_audioCtx = audioCodec ? avcodec_alloc_context3(audioCodec) : nullptr;
+		if(!_audioCtx){
+			std::cerr << "[VIDEO]: Unable to find audio encoder." << std::endl;
+			return false;
+		}
+		_audioCtx->sample_fmt = AV_SAMPLE_FMT_FLTP;
+		_audioCtx->sample_rate = rate;
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 24, 100)
+		av_channel_layout_default(&_audioCtx->ch_layout, 2);
+#else
+		_audioCtx->channel_layout = AV_CH_LAYOUT_STEREO;
+		_audioCtx->channels = 2;
+#endif
+		_audioCtx->bit_rate = 320000;
+		_audioCtx->time_base = {1, rate};
+		if(_formatCtx->oformat->flags & AVFMT_GLOBALHEADER){
+			_audioCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+		}
+		if(avcodec_open2(_audioCtx, audioCodec, nullptr) < 0){
+			std::cerr << "[VIDEO]: Unable to open audio encoder." << std::endl;
+			return false;
+		}
+		_audioStream = avformat_new_stream(_formatCtx, nullptr);
+		if(!_audioStream || avcodec_parameters_from_context(_audioStream->codecpar, _audioCtx) < 0){
+			std::cerr << "[VIDEO]: Unable to create audio stream." << std::endl;
+			return false;
+		}
+		_audioStream->id = _formatCtx->nb_streams - 1;
+		_audioStream->time_base = _audioCtx->time_base;
+
+		_audioFrame = av_frame_alloc();
+		if(!_audioFrame){
+			std::cerr << "[VIDEO]: Unable to allocate audio frame." << std::endl;
+			return false;
+		}
+		_audioFrame->format = _audioCtx->sample_fmt;
+		_audioFrame->sample_rate = rate;
+		_audioFrame->nb_samples = _audioCtx->frame_size;
+#if LIBAVUTIL_VERSION_INT >= AV_VERSION_INT(57, 24, 100)
+		av_channel_layout_copy(&_audioFrame->ch_layout, &_audioCtx->ch_layout);
+#else
+		_audioFrame->channel_layout = _audioCtx->channel_layout;
+		_audioFrame->channels = _audioCtx->channels;
+#endif
+		if(av_frame_get_buffer(_audioFrame, 0) < 0){
+			std::cerr << "[VIDEO]: Unable to create audio frame buffer." << std::endl;
+			return false;
+		}
+		_audioPos = 0;
+	}
+
 	// Open file, write header.
 	if(avio_open(&_formatCtx->pb, path.c_str(), AVIO_FLAG_WRITE) < 0){
 		std::cerr << "[VIDEO]: Unable to open IO file." << std::endl;
@@ -592,11 +682,29 @@ bool Recorder::initVideo(const std::string & path, Export::Format format, bool v
 
 void Recorder::endVideo(){
 #ifdef MIDIVIZ_SUPPORT_VIDEO
-	avcodec_send_frame(_codecCtx, nullptr);
+	// The end of stream is refused while a sent frame still waits: without the retry, a delayed encoder (VideoToolbox) loses its last frames.
+	while(avcodec_send_frame(_codecCtx, nullptr) == AVERROR(EAGAIN) && flush()){}
 	flush();
+	if(_audioCtx){
+		encodeAudio(_wavFrames);
+		avcodec_send_frame(_audioCtx, nullptr);
+		flush(true);
+	}
 	av_write_trailer(_formatCtx);
-	avio_closep(&_formatCtx->pb);
+	freeVideo();
+#endif
+}
+
+// Also frees a partial setup, after a failed initVideo.
+void Recorder::freeVideo(){
+#ifdef MIDIVIZ_SUPPORT_VIDEO
+	if(_formatCtx){
+		avio_closep(&_formatCtx->pb);
+	}
 	avcodec_free_context(&_codecCtx);
+	avcodec_free_context(&_audioCtx);
+	av_frame_free(&_audioFrame);
+	_wav.close();
 	for(unsigned int i = 0; i < _frames.size(); ++i){
 		av_frame_free(&_frames[i]);
 		_frames[i] = nullptr;
@@ -612,21 +720,55 @@ void Recorder::endVideo(){
 	_codec = nullptr;
 	_codecCtx = nullptr;
 	_stream = nullptr;
+	_audioStream = nullptr;
 #endif
 }
 
-bool Recorder::flush(){
+// Encodes the WAV up to sample `until` in whole encoder frames; only the WAV's last frame is short.
+void Recorder::encodeAudio(int64_t until){
+#ifdef MIDIVIZ_SUPPORT_VIDEO
+	const int64_t frameSize = _audioCtx->frame_size;
+	while(_audioPos < _wavFrames && (_audioPos + frameSize <= until || until >= _wavFrames)){
+		const int count = int((std::min)(frameSize, _wavFrames - _audioPos));
+		_wavBuffer.resize(size_t(count) * _wavChannels);
+		if(av_frame_make_writable(_audioFrame) < 0 || !WavWriter::readFrames(_wav, _wavChannels, _wavBuffer.data(), count)){
+			std::cerr << "[VIDEO]: Unable to read audio at sample " << _audioPos << ", dropping the rest." << std::endl;
+			_audioPos = _wavFrames;
+			return;
+		}
+		// A mono WAV feeds both sides.
+		const int rightChannel = (std::min)(1, _wavChannels - 1);
+		float * left = reinterpret_cast<float *>(_audioFrame->data[0]);
+		float * right = reinterpret_cast<float *>(_audioFrame->data[1]);
+		for(int i = 0; i < count; ++i){
+			left[i] = _wavBuffer[i * _wavChannels];
+			right[i] = _wavBuffer[i * _wavChannels + rightChannel];
+		}
+		_audioFrame->nb_samples = count;
+		_audioFrame->pts = _audioPos;
+		_audioPos += count;
+		if(avcodec_send_frame(_audioCtx, _audioFrame) < 0){
+			std::cerr << "[VIDEO]: Unable to send audio at sample " << _audioFrame->pts << "." << std::endl;
+		}
+		flush(true);
+	}
+#endif
+}
+
+bool Recorder::flush(bool audio){
 #ifdef MIDIVIZ_SUPPORT_VIDEO
 	// When multithreading, lock as we use the stream and contexts in a sequential way.
 #ifdef FFMPEG_USE_THREADS
 	const std::lock_guard<std::mutex> lock(_streamMutex);
 #endif
+	AVCodecContext * codecCtx = audio ? _audioCtx : _codecCtx;
+	AVStream * stream = audio ? _audioStream : _stream;
 	// Keep flushing.
 	while(true){
 		AVPacket packet = {0};
 		av_init_packet(&packet);
 		// Get packet.
-		int res = avcodec_receive_packet(_codecCtx, &packet);
+		int res = avcodec_receive_packet(codecCtx, &packet);
 		if(res == AVERROR(EAGAIN) || res == AVERROR_EOF){
 			return true;
 		} else if(res < 0){
@@ -634,8 +776,8 @@ bool Recorder::flush(){
 			return false;
 		}
 		// Adjust timing for output.
-		av_packet_rescale_ts(&packet, _codecCtx->time_base, _stream->time_base);
-		packet.stream_index = _stream->index;
+		av_packet_rescale_ts(&packet, codecCtx->time_base, stream->time_base);
+		packet.stream_index = stream->index;
 		// Write packet.
 		res = av_interleaved_write_frame(_formatCtx, &packet);
 		if(res < 0){

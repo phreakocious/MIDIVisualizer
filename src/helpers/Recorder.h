@@ -6,6 +6,8 @@
 #include "../helpers/Configuration.h"
 #include <string>
 #include <vector>
+#include <fstream>
+#include <cstdint>
 #include <memory>
 #include <chrono>
 #include <mutex>
@@ -38,7 +40,7 @@ public:
 
 	void start(bool verbose);
 
-	bool flush();
+	bool flush(bool audio = false);
 
 	void drawProgress();
 	
@@ -58,6 +60,9 @@ public:
 
 	bool setParameters(const Export& exporting);
 
+	// Muxes this WAV into the next video export only; empty for none.
+	void setAudio(const std::string& wavPath);
+
 	static bool videoExportSupported();
 
 private:
@@ -67,6 +72,10 @@ private:
 	bool addFrameToVideo(GLubyte * data);
 	
 	void endVideo();
+
+	void freeVideo();
+
+	void encodeAudio(int64_t until);
 
 	struct CodecOpts {
 		std::string name;
@@ -85,6 +94,13 @@ private:
 	float _sceneDuration = 0.0f;
 	float _currentTime = 0.0f;
 
+	std::string _audioPath;
+	std::ifstream _wav;
+	std::vector<float> _wavBuffer;
+	int _wavChannels = 0;
+	int64_t _wavFrames = 0;
+	int64_t _audioPos = 0;
+
 	// Video context ptrs if available.
 	AVFormatContext * _formatCtx = nullptr;
 	const AVCodec * _codec = nullptr;
@@ -92,6 +108,9 @@ private:
 	AVStream * _stream = nullptr;
 	std::vector<AVFrame *> _frames;
 	std::vector<SwsContext *> _swsContexts;
+	AVCodecContext * _audioCtx = nullptr;
+	AVStream * _audioStream = nullptr;
+	AVFrame * _audioFrame = nullptr;
 #ifdef FFMPEG_USE_THREADS
 	std::mutex _streamMutex;
 #endif

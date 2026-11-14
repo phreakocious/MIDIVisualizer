@@ -2,6 +2,7 @@
 #include "../helpers/ResourcesManager.h"
 #include "../helpers/ImGuiStyle.h"
 #include "../helpers/System.h"
+#include "../helpers/WavWriter.h"
 #include "../resources/strings.h"
 
 #include <cstring>
@@ -33,6 +34,7 @@ Viewer::Viewer(const Configuration& config) :
 
 	_fullscreen = config.fullscreen;
 	_windowSize = config.windowSize;
+	_takes = config.takes;
 	_useTransparency = config.useTransparency && _supportTransparency;
 
 	// GL options
@@ -201,6 +203,13 @@ SystemAction Viewer::draw(float currentTime) {
 			_timerStart = 0.0f;
 			_shouldPlay = false;
 			resize(_backbufferSize[0], _backbufferSize[1]);
+			if(!_takeVideoPath.empty()){
+				System::revealFile(_takeVideoPath);
+				if(!_takeDeviceName.empty()){
+					connectDevice(_takeDeviceName);
+				}
+				_takeVideoPath.clear();
+			}
 		}
 		// Make sure the backbuffer is updated, this is nicer.
 		glViewport(0, 0, GLsizei(_backbufferSize[0]), GLsizei(_backbufferSize[1]));
@@ -1408,7 +1417,7 @@ void Viewer::showBottomButtons(){
 	ImGui::helpTooltip("Export video recording");
 
 	if(_recorder.drawGUI(_guiScale)){
-		startRecording();
+		startRecording(_state.prerollTime, float(_scene->duration()));
 	}
 	ImGuiSameLine();
 
@@ -2428,14 +2437,56 @@ bool Viewer::startDirectRecording(const Export& exporting, const glm::vec2 & siz
 		return false;
 	}
 	_recorder.setSize(size);
-	startRecording();
+	startRecording(_state.prerollTime, float(_scene->duration()));
 	_exitAfterRecording = true;
+	return _recorder.isRecording();
+}
+
+bool Viewer::makeTakeVideo(const std::string& folder, bool quitAfter){
+	const std::string wavPath = folder + "/take.wav";
+	int rate = 0;
+	int channels = 0;
+	int64_t frames = 0;
+	int64_t dataOffset = 0;
+	if(!WavWriter::readInfo(wavPath, rate, channels, frames, dataOffset) || rate <= 0 || frames <= 0){
+		std::cerr << "[EXPORT]: Unable to read the take's audio from " << wavPath << "." << std::endl;
+		return false;
+	}
+	std::shared_ptr<MIDISceneLive> liveScene = std::dynamic_pointer_cast<MIDISceneLive>(_scene);
+	const std::string deviceName = liveScene ? liveScene->deviceName() : "";
+
+	Export exporting;
+	exporting.path = folder + "/take.mp4";
+	exporting.format = Export::Format::H264;
+	exporting.postroll = 0.0f;
+	exporting.framerate = _takes.videoFramerate;
+	exporting.bitrate = 40;
+	if(!_recorder.setParameters(exporting)){
+		return false;
+	}
+	// Loaded before the audio is set, so a failure leaves no audio for the next export.
+	if(!loadFile(folder + "/take.mid")){
+		std::cerr << "[EXPORT]: Unable to load " << folder << "/take.mid." << std::endl;
+		return false;
+	}
+	_state.reverseScroll = _takes.notesRise;
+	// The sound plays at its own speed, so the notes must too.
+	_state.scrollSpeed = 1.0f;
+	_recorder.setSize(_takes.videoSize);
+	_recorder.setAudio(wavPath);
+	startRecording(0.0f, float(frames) / float(rate));
+	if(!_recorder.isRecording()){
+		return false;
+	}
+	_exitAfterRecording = quitAfter;
+	_takeDeviceName = deviceName;
+	_takeVideoPath = quitAfter ? "" : exporting.path;
 	return true;
 }
 
-void Viewer::startRecording(){
+void Viewer::startRecording(float preroll, float duration){
 	// We need to provide some information for the recorder to start.
-	_recorder.prepare(_state.prerollTime, float(_scene->duration()), _state.scrollSpeed);
+	_recorder.prepare(preroll, duration, _state.scrollSpeed);
 
 	// Start by clearing up all buffers.
 	// We need:
@@ -2474,6 +2525,10 @@ void Viewer::startRecording(){
 	_finalFramebuffer->unbind();
 
 	_recorder.start(_verbose);
+	// A failed start never reaches the end of export that restores the sizes.
+	if(!_recorder.isRecording()){
+		resize(_backbufferSize[0], _backbufferSize[1]);
+	}
 }
 
 bool Viewer::radioButtonSetMode(const char* name, SetMode& mode, SetMode value){
