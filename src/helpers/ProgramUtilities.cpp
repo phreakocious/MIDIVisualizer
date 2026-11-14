@@ -88,7 +88,7 @@ void ShaderProgram::init(const std::string & vertexName, const std::string & fra
 		// Store textures in their separate list.
 		// Ignore more complex texture types for now
 		if(utype == GL_SAMPLER_1D || utype == GL_SAMPLER_2D || utype == GL_SAMPLER_CUBE || utype == GL_SAMPLER_3D
-		   || utype == GL_SAMPLER_1D_ARRAY || utype == GL_SAMPLER_2D_ARRAY || utype == GL_SAMPLER_CUBE_MAP_ARRAY){
+		   || utype == GL_SAMPLER_1D_ARRAY || utype == GL_SAMPLER_2D_ARRAY || utype == GL_SAMPLER_CUBE_MAP_ARRAY || utype == GL_SAMPLER_2D_SHADOW){
 			_textures[name] = location;
 		} else {
 			_uniforms[name] = location;

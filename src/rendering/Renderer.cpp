@@ -2,6 +2,8 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../helpers/ResourcesManager.h"
@@ -16,6 +18,9 @@
 #undef MAX
 #endif
 
+
+// Size of the 3D keyboard's shadow map: the keyboard is wide and shallow.
+static const glm::ivec2 keysShadowSize(4096, 1024);
 
 void Renderer::renderSetup(){
 	// - Buffers
@@ -162,6 +167,38 @@ void Renderer::renderSetup(){
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _waveIndices);
 	glBindVertexArray(0);
 
+	// -- 3D keyboard: one mesh for all keys and the case, built in drawKeyboard3D when the layout changes.
+	// Each vertex is a position, a normal, and its MIDI note (-1 for the case).
+	glGenBuffers(1, &_keys3DVertices);
+	glGenVertexArrays(1, &_vaoKeys3D);
+	glBindVertexArray(_vaoKeys3D);
+	glBindBuffer(GL_ARRAY_BUFFER, _keys3DVertices);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), NULL);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 7 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
+	glBindVertexArray(0);
+
+	// The keys' shadow map: depth seen from the light, compared on lookup.
+	glGenTextures(1, &_keysShadowMap);
+	glBindTexture(GL_TEXTURE_2D, _keysShadowMap);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, keysShadowSize.x, keysShadowSize.y, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+	glBindTexture(GL_TEXTURE_2D, 0);
+	glGenFramebuffers(1, &_keysShadowFramebuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, _keysShadowFramebuffer);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, _keysShadowMap, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	checkGLError();
 
 	// Programs.
@@ -170,6 +207,7 @@ void Renderer::renderSetup(){
 	_programParticules.init("particles_vert", "particles_frag");
 	_programKeyMajors.init("majorKeys_vert", "majorKeys_frag");
 	_programKeyMinors.init("minorKeys_vert", "minorKeys_frag");
+	_programKeys3D.init("keys3d_vert", "keys3d_frag");
 	_programPedals.init("pedal_vert", "pedal_frag");
 	_programScoreBars.init("score_bars_vert", "score_bars_frag");
 	_programScoreLabels.init("score_labels_vert", "score_labels_frag");
@@ -456,6 +494,275 @@ void Renderer::drawKeyboard(const std::shared_ptr<MIDIScene>& scene, float, cons
 	glUseProgram(0);
 }
 
+namespace {
+
+// Outward unit normal of each edge of an outline in (x, z); edge i runs from o[i] to o[i+1].
+std::vector<glm::vec2> outwardNormals(const std::vector<glm::vec2>& o){
+	const size_t n = o.size();
+	float area = 0.0f;
+	for(size_t i = 0; i < n; ++i){
+		area += o[i].x * o[(i + 1) % n].y - o[(i + 1) % n].x * o[i].y;
+	}
+	std::vector<glm::vec2> res(n);
+	for(size_t i = 0; i < n; ++i){
+		const glm::vec2 e = glm::normalize(o[(i + 1) % n] - o[i]);
+		res[i] = (area > 0.0f ? 1.0f : -1.0f) * glm::vec2(e.y, -e.x);
+	}
+	return res;
+}
+
+// Moves each edge of an outline inward by its own distance d[i]. Holds only where consecutive edges are perpendicular.
+std::vector<glm::vec2> insetOutline(const std::vector<glm::vec2>& o, const std::vector<glm::vec2>& normals, const std::vector<float>& d){
+	const size_t n = o.size();
+	std::vector<glm::vec2> res(n);
+	for(size_t i = 0; i < n; ++i){
+		const size_t prev = (i + n - 1) % n;
+		assert(std::abs(glm::dot(normals[prev], normals[i])) < 1e-4f);
+		res[i] = o[i] - d[prev] * normals[prev] - d[i] * normals[i];
+	}
+	return res;
+}
+
+void addVertex(std::vector<GLfloat>& out, const glm::vec3& p, const glm::vec3& n, float note){
+	out.insert(out.end(), {p.x, p.y, p.z, n.x, n.y, n.z, note});
+}
+
+void addQuad(std::vector<GLfloat>& out, const glm::vec3 (&p)[4], const glm::vec3 (&n)[4], float note){
+	for(int i : {0, 1, 2, 0, 2, 3}){
+		addVertex(out, p[i], n[i], note);
+	}
+}
+
+// One level of a block's side: a height, and how far each edge of the outline has moved in there (out, if negative).
+struct Ring {
+	float y;
+	std::vector<float> inset;
+};
+
+std::vector<float> plus(std::vector<float> v, float d){
+	for(float& x : v){
+		x += d;
+	}
+	return v;
+}
+
+// A key or a block of the case: the outline in (x, z) swept up through rings, bottom first. Each face between two rings
+// is flat; the last one is a bevel whose normals turn from the face below to straight up, so the top edge reads as rounded.
+// Two rings at one height make a ledge. The top is a fan from c, which must see the whole top outline.
+void addBlock(std::vector<GLfloat>& out, const std::vector<glm::vec2>& o, const std::vector<Ring>& rings, const glm::vec2& c, float note){
+	assert(rings.size() >= 3);
+	const size_t n = o.size();
+	const std::vector<glm::vec2> normals = outwardNormals(o);
+	const glm::vec3 up(0.0f, 1.0f, 0.0f);
+	std::vector<glm::vec3> below(n, up);
+	std::vector<glm::vec2> p0 = insetOutline(o, normals, rings[0].inset);
+	for(size_t k = 1; k < rings.size(); ++k){
+		const std::vector<glm::vec2> p1 = insetOutline(o, normals, rings[k].inset);
+		const float y0 = rings[k - 1].y;
+		const float y1 = rings[k].y;
+		const bool bevel = k + 1 == rings.size();
+		for(size_t i = 0; i < n; ++i){
+			const float d = rings[k].inset[i] - rings[k - 1].inset[i];
+			// An edge that neither rises nor moves has no face here.
+			if(y1 == y0 && d == 0.0f){
+				continue;
+			}
+			const size_t j = (i + 1) % n;
+			const glm::vec3 wn = glm::normalize(glm::vec3(normals[i].x * (y1 - y0), d, normals[i].y * (y1 - y0)));
+			const glm::vec3 nb = bevel ? below[i] : wn;
+			const glm::vec3 nt = bevel ? up : wn;
+			addQuad(out, {{p0[i].x, y0, p0[i].y}, {p0[j].x, y0, p0[j].y}, {p1[j].x, y1, p1[j].y}, {p1[i].x, y1, p1[i].y}}, {nb, nb, nt, nt}, note);
+			below[i] = wn;
+		}
+		p0 = p1;
+	}
+	const float h = rings.back().y;
+	for(size_t i = 0; i < n; ++i){
+		addVertex(out, glm::vec3(c.x, h, c.y), up, note);
+		addVertex(out, glm::vec3(p0[i].x, h, p0[i].y), up, note);
+		addVertex(out, glm::vec3(p0[(i + 1) % n].x, h, p0[(i + 1) % n].y), up, note);
+	}
+}
+
+}
+
+void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float time, const glm::mat4 & mvp, const glm::vec3 & eye, float aspect, float depth, const glm::vec3 & whiteColor, const glm::vec3 & blackColor, const ColorArray & majorColors, const ColorArray & minorColors, bool highlightKeys, float minorsWidth, float minorHeight) {
+	// Sizes follow a real piano, in white key widths ("slots", 23.5 mm). The x layout is the flat keyboard's, so the notes line up.
+	const float slot = 2.0f * aspect / float(_keyCount);
+	const float gap = 0.05f * slot;
+	const float whiteTop = 0.7f * slot;
+	const float blackTop = whiteTop + 0.5f * slot;
+	const float blackWidth = 0.9f * slot * minorsWidth;
+	const float blackFront = -depth + minorHeight * depth;
+	// A white key's top is a cap whose front overhangs the key's face a little.
+	const float lip = 0.03f * slot;
+	const float lipBottom = whiteTop - 0.08f * slot;
+	const float whiteBevel = 0.04f * slot;
+	const float blackBevel = 0.07f * slot;
+	// A key pivots on the balance rail, well behind its visible part; its front goes down 10 mm.
+	const float pivotZ = -1.5f * depth;
+	const float pressAngle = 0.42f * slot / -pivotZ;
+	// The key slip in front hides a pressed key's front; the key bed fills the gaps.
+	const float slipTop = 0.2f * slot;
+	const float slipBottom = -1.5f * slot;
+	const float slipFront = gap + 0.6f * slot;
+	const float bedY = -0.5f * slot;
+
+	const std::array<float, 6> layout = {{aspect, depth, float(_keyCount), float(_minKeyMajor), minorsWidth, minorHeight}};
+	if(layout != _keys3DLayout){
+		_keys3DLayout = layout;
+		static const int whiteIndex[12] = {0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6};
+		static const bool isBlack[12] = {false, true, false, true, false, false, true, false, true, false, true, false};
+		// Black keys first: white keys are notched around the ones that are shown.
+		std::array<float, 128> blackX;
+		std::array<bool, 128> shown;
+		for(int note = 0; note < 128; ++note){
+			const int k = note % 12;
+			const int white = (note / 12) * 7 + whiteIndex[k] - int(_minKeyMajor);
+			if(!isBlack[k]){
+				shown[note] = white >= 0 && white < int(_keyCount);
+				continue;
+			}
+			// Between this white key and the next, nudged like the flat keyboard.
+			const float shift = (k == 1 || k == 6) ? -0.1f : ((k == 3 || k == 10) ? 0.1f : 0.0f);
+			blackX[note] = -aspect + float(white + 1) * slot + shift * blackWidth;
+			shown[note] = std::abs(blackX[note]) < aspect - 0.5f * slot;
+		}
+		std::vector<GLfloat> mesh;
+		const std::vector<float> straight(4, 0.0f);
+		for(int note = 0; note < 128; ++note){
+			if(!shown[note]){
+				continue;
+			}
+			const int k = note % 12;
+			if(isBlack[k]){
+				const float x0 = blackX[note] - 0.5f * blackWidth;
+				const float x1 = blackX[note] + 0.5f * blackWidth;
+				// Straight in the slot between the white keys; above them the sides narrow and the front slopes back.
+				const std::vector<glm::vec2> outline = {{x0, -depth}, {x1, -depth}, {x1, blackFront}, {x0, blackFront}};
+				const float side = 0.15f * blackWidth;
+				const std::vector<float> taper = {0.0f, side, 0.22f * slot, side};
+				addBlock(mesh, outline, {{0.0f, straight}, {whiteTop, straight}, {blackTop - blackBevel, taper}, {blackTop, plus(taper, blackBevel)}}, {blackX[note], 0.5f * (blackFront - depth)}, float(note));
+				continue;
+			}
+			const int white = (note / 12) * 7 + whiteIndex[k] - int(_minKeyMajor);
+			const float x0 = -aspect + float(white) * slot + 0.5f * gap;
+			const float x1 = x0 + slot - gap;
+			// Behind the notch, the key narrows to the space between its black neighbours.
+			const float notchZ = blackFront + gap;
+			const float b0 = (note > 0 && shown[note - 1] && isBlack[(note - 1) % 12]) ? blackX[note - 1] + 0.5f * blackWidth + gap : x0;
+			const float b1 = (note < 127 && shown[note + 1] && isBlack[(note + 1) % 12]) ? blackX[note + 1] - 0.5f * blackWidth - gap : x1;
+			std::vector<glm::vec2> outline = {{x0, 0.0f}, {x1, 0.0f}};
+			if(b1 < x1){
+				outline.insert(outline.end(), {{x1, notchZ}, {b1, notchZ}});
+			}
+			outline.insert(outline.end(), {{b1, -depth}, {b0, -depth}});
+			if(b0 > x0){
+				outline.insert(outline.end(), {{b0, notchZ}, {x0, notchZ}});
+			}
+			// Edge 0 is the front: the cap's lip.
+			const std::vector<float> body(outline.size(), 0.0f);
+			std::vector<float> cap(body);
+			cap[0] = -lip;
+			addBlock(mesh, outline, {{0.0f, body}, {lipBottom, body}, {lipBottom, cap}, {whiteTop - whiteBevel, cap}, {whiteTop, plus(cap, whiteBevel)}}, {0.5f * (b0 + b1), 0.5f * notchZ}, float(note));
+		}
+		const glm::vec3 up(0.0f, 1.0f, 0.0f);
+		addQuad(mesh, {{-aspect, bedY, 0.0f}, {aspect, bedY, 0.0f}, {aspect, bedY, -depth}, {-aspect, bedY, -depth}}, {up, up, up, up}, -1.0f);
+		const std::vector<glm::vec2> slip = {{-aspect, gap}, {aspect, gap}, {aspect, slipFront}, {-aspect, slipFront}};
+		addBlock(mesh, slip, {{slipBottom, straight}, {slipTop - 0.08f * slot, straight}, {slipTop, plus(straight, 0.08f * slot)}}, {0.0f, 0.5f * (gap + slipFront)}, -1.0f);
+
+		glBindBuffer(GL_ARRAY_BUFFER, _keys3DVertices);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * mesh.size(), mesh.data(), GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		_keys3DVertexCount = GLsizei(mesh.size() / 7);
+	}
+
+	// Keys go down in 20 ms and come back up in 80 ms. A jump in time (seek, loop, first frame) sets them at once.
+	const auto& actives = scene->getActiveKeys();
+	const float dt = time - _keys3DTime;
+	_keys3DTime = time;
+	const bool jump = dt < 0.0f || dt > 0.25f;
+	std::array<float, 128> press;
+	std::array<int, 128> sets;
+	for(int note = 0; note < 128; ++note){
+		const bool down = actives[note] >= 0;
+		if(down){
+			_keys3DLastSet[note] = actives[note];
+		}
+		float& p = _keys3DPress[note];
+		p = jump ? (down ? 1.0f : 0.0f) : glm::clamp(p + (down ? dt / 0.02f : -dt / 0.08f), 0.0f, 1.0f);
+		press[note] = glm::smoothstep(0.0f, 1.0f, p);
+		sets[note] = p > 0.0f ? _keys3DLastSet[note] : -1;
+	}
+
+	// Light from above, behind and to the left, so black keys cast toward the player; the shadow map covers the keyboard's box as the light sees it.
+	const glm::vec3 lightDir = glm::normalize(glm::vec3(-0.4f, 1.0f, -0.7f));
+	const glm::mat4 lightView = glm::lookAt(lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+	glm::vec3 lo(1e9f);
+	glm::vec3 hi(-1e9f);
+	for(int i = 0; i < 8; ++i){
+		const glm::vec4 corner((i & 1) ? aspect : -aspect, (i & 2) ? blackTop : slipBottom, (i & 4) ? slipFront : pivotZ, 1.0f);
+		const glm::vec3 p(lightView * corner);
+		lo = glm::min(lo, p);
+		hi = glm::max(hi, p);
+	}
+	const glm::mat4 lightMvp = glm::ortho(lo.x, hi.x, lo.y, hi.y, -hi.z, -lo.z) * lightView;
+	// Shadow lookups start this far off the surface, past the soft edge's reach, so a lit face does not shadow itself.
+	const float shadowOffset = 4.0f * (hi.x - lo.x) / float(keysShadowSize.x);
+
+	_programKeys3D.use();
+	_programKeys3D.uniform("pivotZ", pivotZ);
+	_programKeys3D.uniform("pressAngle", pressAngle);
+	_programKeys3D.uniforms("press", press.size(), press.data());
+	_programKeys3D.uniforms("sets", sets.size(), sets.data());
+	_programKeys3D.uniform("lightMvp", lightMvp);
+	_programKeys3D.uniform("shadowOffset", shadowOffset);
+	_programKeys3D.uniform("lightDir", lightDir);
+	_programKeys3D.uniform("eye", eye);
+	_programKeys3D.uniform("whiteTop", whiteTop);
+	_programKeys3D.uniform("gap", gap);
+	_programKeys3D.uniform("lip", lip);
+	_programKeys3D.uniform("lipBottom", lipBottom);
+	_programKeys3D.uniform("whiteColor", whiteColor);
+	_programKeys3D.uniform("blackColor", blackColor);
+	_programKeys3D.uniforms("majorColor", majorColors.size(), majorColors.data());
+	_programKeys3D.uniforms("minorColor", minorColors.size(), minorColors.data());
+	_programKeys3D.uniform("highlightKeys", highlightKeys);
+
+	GLint framebuffer = 0;
+	GLint viewport[4];
+	glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
+	glGetIntegerv(GL_VIEWPORT, viewport);
+	glEnable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glBindVertexArray(_vaoKeys3D);
+
+	// Depth seen from the light. The map must not be bound for reading while it is the target.
+	_programKeys3D.texture("shadowMap", 0, GL_TEXTURE_2D);
+	_programKeys3D.uniform("shadowPass", true);
+	_programKeys3D.uniform("mvp", lightMvp);
+	glBindFramebuffer(GL_FRAMEBUFFER, _keysShadowFramebuffer);
+	glViewport(0, 0, keysShadowSize.x, keysShadowSize.y);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_POLYGON_OFFSET_FILL);
+	glPolygonOffset(2.0f, 4.0f);
+	glDrawArrays(GL_TRIANGLES, 0, _keys3DVertexCount);
+	glDisable(GL_POLYGON_OFFSET_FILL);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	_programKeys3D.texture("shadowMap", _keysShadowMap, GL_TEXTURE_2D);
+	_programKeys3D.uniform("shadowPass", false);
+	_programKeys3D.uniform("mvp", mvp);
+	glDrawArrays(GL_TRIANGLES, 0, _keys3DVertexCount);
+
+	glBindVertexArray(0);
+	glEnable(GL_CULL_FACE);
+	glDisable(GL_DEPTH_TEST);
+	glUseProgram(0);
+}
+
 void Renderer::drawPedals(const std::shared_ptr<MIDIScene>& scene, float time, const glm::vec2 & invScreenSize, const State::PedalsState & state, float keyboardHeight, bool horizontalMode) {
 
 	glEnable(GL_BLEND);
@@ -720,16 +1027,19 @@ void Renderer::drawScore(const std::shared_ptr<MIDIScene>& scene, float time, co
 }
 
 void Renderer::clean(){
-	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave};
-	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer };
+	GLuint vaos[] = {_vaoQuad, _vaoQuadWithNoteData, _vaoQuadWithKeyData, _vaoWave, _vaoKeys3D};
+	GLuint buffers[] = {_quadVertices, _quadIndices, _waveVertices, _waveIndices, _notesDataBuffer, _keysDataBuffer, _keysGainBuffer, _keys3DVertices };
 	glDeleteVertexArrays(sizeof(vaos)/sizeof(vaos[0]), vaos);
 	glDeleteBuffers(sizeof(buffers)/sizeof(buffers[0]), buffers);
+	glDeleteFramebuffers(1, &_keysShadowFramebuffer);
+	glDeleteTextures(1, &_keysShadowMap);
 
 	_programNotes.clean();
 	_programFlashes.clean();
 	_programParticules.clean();
 	_programKeyMinors.clean();
 	_programKeyMajors.clean();
+	_programKeys3D.clean();
 	_programPedals.clean();
 	_programWave.clean();
 	_programWaveNoise.clean();

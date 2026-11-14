@@ -335,6 +335,10 @@ void Viewer::drawScene(bool transparentBG){
 		if (layerId >= _layers.size()) {
 			continue;
 		}
+		// The 3D view draws its own keyboard.
+		if (_state.trail3D && layerId == Layer::KEYBOARD) {
+			continue;
+		}
 		if (_layers[layerId].draw && *(_layers[layerId].toggle)) {
 			(this->*_layers[layerId].draw)(invSizeFb);
 		}
@@ -342,7 +346,7 @@ void Viewer::drawScene(bool transparentBG){
 
 	_renderFramebuffer->unbind();
 
-	// shortcut: test of the 3D look, the flat frame laid on a floor in perspective; no FXAA on this path.
+	// shortcut: test of the 3D look, the flat frame laid on a floor in perspective; only the keyboard is real 3D.
 	if(_state.trail3D){
 		// Mipmaps and anisotropic filtering keep the far end from shimmering.
 		glBindTexture(GL_TEXTURE_2D, _renderFramebuffer->textureId());
@@ -354,9 +358,10 @@ void Viewer::drawScene(bool transparentBG){
 		const float aspect = float(_finalFramebuffer->_width) / float(_finalFramebuffer->_height);
 		const float tilt = glm::radians(_state.trailTilt);
 		const float halfFov = glm::radians(30.0f);
-		// Camera 2 units from the near edge, on the ray that puts that edge at the bottom of the frame and full width.
-		// At 90 degrees and length 1 this reproduces the flat view.
-		const glm::vec3 eye(0.0f, 2.0f * std::sin(tilt + halfFov), 2.0f * std::cos(tilt + halfFov));
+		// Camera 2 units from the near edge, on a ray just above the one that would put that edge at the bottom of the frame,
+		// so the keyboard sits a little above the bottom.
+		const float margin = glm::radians(5.0f);
+		const glm::vec3 eye(0.0f, 2.0f * std::sin(tilt + halfFov - margin), 2.0f * std::cos(tilt + halfFov - margin));
 		const glm::vec3 dir(0.0f, -std::sin(tilt), -std::cos(tilt));
 		const glm::vec3 up(0.0f, std::cos(tilt), -std::sin(tilt));
 		const glm::mat4 mvp = glm::perspective(2.0f * halfFov, aspect, 0.05f, 100.0f) * glm::lookAt(eye, eye + dir, up);
@@ -380,7 +385,23 @@ void Viewer::drawScene(bool transparentBG){
 		_tilt.program().uniform("rangeV", glm::vec2(kh, 1.0f));
 		_tilt.program().uniform("rangeZ", glm::vec2(kz, kz - 2.0f * (1.0f - kh) * _state.trailLength));
 		_tilt.draw(_renderFramebuffer->textureId(), 0.0f);
+		if(_state.showKeyboard){
+			const ColorArray & majColors = _state.keyboard.customKeyColors ? _state.keyboard.majorColor : _state.notes.majorColors;
+			const ColorArray & minColors = _state.keyboard.customKeyColors ? _state.keyboard.minorColor : _state.notes.minorColors;
+			_renderer.drawKeyboard3D(_scene, _timer, mvp, eye, aspect, -kz, _state.keyboard.backColor, _state.keyboard.edgeColor, majColors, minColors, _state.keyboard.highlightKeys, _state.background.minorsWidth, _state.keyboard.minorHeight);
+		}
 		_finalFramebuffer->unbind();
+		// Smooth the key edges: FXAA from the final image into the render one, then copy back.
+		if(_state.applyAA){
+			_renderFramebuffer->bind();
+			glViewport(0, 0, _renderFramebuffer->_width, _renderFramebuffer->_height);
+			_fxaa.draw(_finalFramebuffer->textureId(), 0.0, invSizeFb);
+			_renderFramebuffer->unbind();
+			_renderFramebuffer->bind(GL_READ_FRAMEBUFFER);
+			_finalFramebuffer->bind(GL_DRAW_FRAMEBUFFER);
+			glBlitFramebuffer(0, 0, _renderFramebuffer->_width, _renderFramebuffer->_height, 0, 0, _finalFramebuffer->_width, _finalFramebuffer->_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+			_finalFramebuffer->unbind();
+		}
 		return;
 	}
 	// The 3D test path leaves a mipmap filter behind; a resize would make the texture incomplete.
