@@ -258,7 +258,11 @@ SystemAction Viewer::draw(float currentTime) {
 			_shouldPlay = false;
 			resize(_backbufferSize[0], _backbufferSize[1]);
 			if(!_takeVideoPath.empty()){
-				System::revealFile(_takeVideoPath);
+				if(_recorder.error().empty()){
+					System::revealFile(_takeVideoPath);
+				} else {
+					_takeError = "Could not make the video: " + _recorder.error();
+				}
 				// Live notes rise again at once, as after Start in the devices popup.
 				if(!_takeDeviceName.empty() && connectDevice(_takeDeviceName)){
 					_shouldPlay = true;

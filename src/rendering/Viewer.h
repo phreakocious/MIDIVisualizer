@@ -233,6 +233,7 @@ private:
 	TakeSettings _takes;
 	std::string _takeDeviceName;
 	std::string _takeVideoPath;
+	std::string _takeError;
 	bool _fullscreen = false;
 	bool _liveplay = false;
 	bool _useTransparency = false;
@@ -245,7 +246,6 @@ private:
 	// What _audio was last opened on, so a settings change reopens it.
 	std::string _audioOpenedDevice;
 	int _audioOpenedChannel = 0;
-	std::string _takeError;
 	int64_t _takeDropBase = 0;
 	int64_t _takeDropped = 0;
 	int64_t _takeJumpBase = 0;

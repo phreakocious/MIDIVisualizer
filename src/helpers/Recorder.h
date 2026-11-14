@@ -63,6 +63,9 @@ public:
 	// Muxes this WAV into the next video export only; empty for none.
 	void setAudio(const std::string& wavPath);
 
+	// Why the last export lost video or audio, or did not start; empty when it did not.
+	const std::string & error() const;
+
 	static bool videoExportSupported();
 
 private:
@@ -76,6 +79,9 @@ private:
 	void freeVideo();
 
 	void encodeAudio(int64_t until);
+
+	// Keeps the first reason: later failures follow from it.
+	void fail(const char * reason);
 
 	struct CodecOpts {
 		std::string name;
@@ -101,6 +107,7 @@ private:
 	int _wavChannels = 0;
 	int64_t _wavFrames = 0;
 	int64_t _audioPos = 0;
+	std::string _error;
 
 	// Video context ptrs if available.
 	AVFormatContext * _formatCtx = nullptr;

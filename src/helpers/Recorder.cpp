@@ -103,7 +103,8 @@ void writePNGToPath(std::vector<GLubyte>* buffer, const glm::ivec2 size, bool ex
 	}
 }
 
-void writeFrameToVideo(std::vector<GLubyte>* buffer, const glm::ivec2 size, bool exportNoBackground, bool cancelPremultiply, AVFrame* frame, SwsContext* swsContext, AVCodecContext* codecCtx, Recorder* recorder){
+// False when the frame is lost.
+bool writeFrameToVideo(std::vector<GLubyte>* buffer, const glm::ivec2 size, bool exportNoBackground, bool cancelPremultiply, AVFrame* frame, SwsContext* swsContext, AVCodecContext* codecCtx, Recorder* recorder){
 #ifdef MIDIVIZ_SUPPORT_VIDEO
 	convertImageInPlace(*buffer, size, exportNoBackground, cancelPremultiply);
 
@@ -114,15 +115,18 @@ void writeFrameToVideo(std::vector<GLubyte>* buffer, const glm::ivec2 size, bool
 	// Rescale and convert to the proper output layout.
 	sws_scale(swsContext, srcs, strides, 0, size[1], frame->data, frame->linesize);
 	// Send frame.
-	const int res = avcodec_send_frame(codecCtx, frame);
+	int res = avcodec_send_frame(codecCtx, frame);
 	if(res == AVERROR(EAGAIN)){
 		// Unavailable right now, should flush and retry.
-		if(recorder->flush()){
-			avcodec_send_frame(codecCtx, frame);
-		}
-	} else if(res < 0){
-		std::cerr << "[VIDEO]: Unable to send frame " << (frame->pts + 1) << "." << std::endl;
+		res = recorder->flush() ? avcodec_send_frame(codecCtx, frame) : res;
 	}
+	if(res < 0){
+		std::cerr << "[VIDEO]: Unable to send frame " << (frame->pts + 1) << "." << std::endl;
+		return false;
+	}
+	return true;
+#else
+	return false;
 #endif
 }
 
@@ -180,6 +184,15 @@ void Recorder::record(const std::shared_ptr<Framebuffer> & frame){
 	if(frame->_width != _size[0] || frame->_height != _size[1]){
 		std::cout << std::endl;
 		std::cerr << "[EXPORT]: Unexpected frame size while recording, at frame " << displayCurrentFrame << ". Stopping." << std::endl;
+		fail("the frame size changed.");
+		// The threads may still use the buffers and contexts, and the next start must find them joined.
+		for(auto& thread : _savingThreads){
+			if(thread.joinable())
+				thread.join();
+		}
+		if(_config.format != Export::Format::PNG){
+			freeVideo();
+		}
 		_currentFrame = _framesCount;
 		return;
 	}
@@ -212,7 +225,9 @@ void Recorder::record(const std::shared_ptr<Framebuffer> & frame){
 #ifdef FFMPEG_USE_THREADS
 		_savingThreads[buffIndex] = std::thread(writeFrameToVideo, &_savingBuffers[buffIndex], _size,  _config.alphaBackground, _config.fixPremultiply, _frames[buffIndex], _swsContexts[buffIndex], _codecCtx, this);
 #else
-		writeFrameToVideo( &_savingBuffers[buffIndex], _size, _config.alphaBackground, _config.fixPremultiply, _frames[buffIndex], _swsContexts[buffIndex], _codecCtx, this);
+		if(!writeFrameToVideo( &_savingBuffers[buffIndex], _size, _config.alphaBackground, _config.fixPremultiply, _frames[buffIndex], _swsContexts[buffIndex], _codecCtx, this)){
+			fail("the encoder refused a video frame.");
+		}
 #endif
 		if(_audioCtx){
 			// shortcut: audio starts at scene time 0, which holds because takes export without preroll; a preroll would need leading silence.
@@ -369,11 +384,13 @@ void Recorder::prepare(float preroll, float duration, float speed){
 
 void Recorder::start(bool verbose) {
 	_currentFrame = 0;
+	_error.clear();
 
 	if (_config.format != Export::Format::PNG) {
 		// A failed setup ends the export at once: recording would use the freed contexts.
 		if(!initVideo(_config.path, _config.format, verbose)){
 			freeVideo();
+			fail("the encoder could not start.");
 			_currentFrame = _framesCount;
 		}
 	}
@@ -456,6 +473,16 @@ bool Recorder::setParameters(const Export& exporting){
 
 void Recorder::setAudio(const std::string& wavPath){
 	_audioPath = wavPath;
+}
+
+const std::string & Recorder::error() const {
+	return _error;
+}
+
+void Recorder::fail(const char * reason){
+	if(_error.empty()){
+		_error = reason;
+	}
 }
 
 bool Recorder::videoExportSupported(){
@@ -692,7 +719,11 @@ void Recorder::endVideo(){
 		avcodec_send_frame(_audioCtx, nullptr);
 		flush(true);
 	}
-	av_write_trailer(_formatCtx);
+	// The trailer also flushes the file's buffer, so a full disk shows here at the latest.
+	if(av_write_trailer(_formatCtx) < 0){
+		std::cerr << "[VIDEO]: Unable to write the end of the file." << std::endl;
+		fail("writing the file failed.");
+	}
 	freeVideo();
 #endif
 }
@@ -735,6 +766,7 @@ void Recorder::encodeAudio(int64_t until){
 		_wavBuffer.resize(size_t(count) * _wavChannels);
 		if(av_frame_make_writable(_audioFrame) < 0 || !WavWriter::readFrames(_wav, _wavChannels, _wavBuffer.data(), count)){
 			std::cerr << "[VIDEO]: Unable to read audio at sample " << _audioPos << ", dropping the rest." << std::endl;
+			fail("reading the audio failed.");
 			_audioPos = _wavFrames;
 			return;
 		}
@@ -749,10 +781,13 @@ void Recorder::encodeAudio(int64_t until){
 		_audioFrame->nb_samples = count;
 		_audioFrame->pts = _audioPos;
 		_audioPos += count;
-		if(avcodec_send_frame(_audioCtx, _audioFrame) < 0){
-			std::cerr << "[VIDEO]: Unable to send audio at sample " << _audioFrame->pts << "." << std::endl;
+		// Every later frame would fail the same way.
+		if(avcodec_send_frame(_audioCtx, _audioFrame) < 0 || !flush(true)){
+			std::cerr << "[VIDEO]: Unable to encode audio at sample " << _audioFrame->pts << ", dropping the rest." << std::endl;
+			fail("the audio could not be encoded.");
+			_audioPos = _wavFrames;
+			return;
 		}
-		flush(true);
 	}
 #endif
 }
@@ -775,6 +810,7 @@ bool Recorder::flush(bool audio){
 			return true;
 		} else if(res < 0){
 			std::cerr << "[VIDEO]: Unable to retrieve packet." << std::endl;
+			fail("the encoder failed.");
 			return false;
 		}
 		// Adjust timing for output.
@@ -784,6 +820,7 @@ bool Recorder::flush(bool audio){
 		res = av_interleaved_write_frame(_formatCtx, &packet);
 		if(res < 0){
 			std::cerr << "[VIDEO]: Unable to write frame to file." << std::endl;
+			fail("writing the file failed.");
 			return false;
 		}
 	}
