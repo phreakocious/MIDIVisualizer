@@ -263,11 +263,7 @@ SystemAction Viewer::draw(float currentTime) {
 				} else {
 					_takeError = "Could not make the video: " + _recorder.error();
 				}
-				// Live notes rise again at once, as after Start in the devices popup.
-				if(!_takeDeviceName.empty() && connectDevice(_takeDeviceName)){
-					_shouldPlay = true;
-					_timerStart = currentTime;
-				}
+				resumeLive(_takeDeviceName);
 				_takeVideoPath.clear();
 			}
 		}
@@ -1660,11 +1656,15 @@ void Viewer::updateTakes(){
 		_audioOpenedDevice.clear();
 		return;
 	}
-	if(_audioOpenedDevice == _takes.audioDevice && _audioOpenedChannel == _takes.audioFirstChannel){
+	// Tried again now and then while closed, so a device plugged in later is picked up.
+	const double now = AudioInput::hostNow();
+	const bool retry = !_audio.isOpen() && now >= _audioRetryTime;
+	if(!retry && _audioOpenedDevice == _takes.audioDevice && _audioOpenedChannel == _takes.audioFirstChannel){
 		return;
 	}
 	_audioOpenedDevice = _takes.audioDevice;
 	_audioOpenedChannel = _takes.audioFirstChannel;
+	_audioRetryTime = now + 2.0;
 	_audio.setSink(nullptr);
 	if(_audio.open(_audioOpenedDevice, _audioOpenedChannel)){
 		_audio.setSink([this](double ptsHost, const float * stereo, size_t frames){
@@ -1704,9 +1704,11 @@ void Viewer::startTake(float currentTime){
 }
 
 void Viewer::showTakeButtons(float currentTime){
-	// An unplugged or starved device sends nothing; a denied microphone sends silence, which the take reports at its end.
 	std::string inputProblem;
-	if(_audio.isOpen() && AudioInput::hostNow() - _audio.lastBufferHost() > 0.5){
+	if(!_takes.audioDevice.empty() && !_audio.isOpen()){
+		inputProblem = _audio.error();
+	} else if(_audio.isOpen() && AudioInput::hostNow() - _audio.lastBufferHost() > 0.5){
+		// An unplugged or starved device sends nothing; a denied microphone sends silence, which the take reports at its end.
 		inputProblem = "No sound is arriving from " + _audioOpenedDevice + ".";
 	}
 	const bool stopping = _take.isStopping();
@@ -1721,8 +1723,7 @@ void Viewer::showTakeButtons(float currentTime){
 	} else {
 		const char * reason = stopping ? "Writing the last take"
 			: _takes.audioDevice.empty() ? "Choose an audio input in Takes..."
-			: !_audio.isOpen() ? _audio.error().c_str()
-			: !inputProblem.empty() ? inputProblem.c_str() : nullptr;
+			: !_audio.isOpen() || !inputProblem.empty() ? inputProblem.c_str() : nullptr;
 		if(takeButton("Record take###Take", reason, "Record the instrument's sound and MIDI to a new folder in Movies/MIDIVisualizer")){
 			startTake(currentTime);
 		}
@@ -2769,8 +2770,8 @@ bool Viewer::makeTakeVideo(const std::string& folder, bool quitAfter){
 	startRecording(0.0f, float(frames) / float(rate));
 	if(!_recorder.isRecording()){
 		// Back to live mode, as the end of the export would do.
-		if(!quitAfter && !deviceName.empty()){
-			connectDevice(deviceName);
+		if(!quitAfter){
+			resumeLive(deviceName);
 		}
 		return false;
 	}
@@ -2778,6 +2779,14 @@ bool Viewer::makeTakeVideo(const std::string& folder, bool quitAfter){
 	_takeDeviceName = deviceName;
 	_takeVideoPath = quitAfter ? "" : exporting.path;
 	return true;
+}
+
+void Viewer::resumeLive(const std::string& deviceName){
+	// Live notes rise again at once, as after Start in the devices popup.
+	if(!deviceName.empty() && connectDevice(deviceName)){
+		_shouldPlay = true;
+		_timerStart = DEBUG_SPEED * float(glfwGetTime());
+	}
 }
 
 void Viewer::startRecording(float preroll, float duration){

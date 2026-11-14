@@ -178,6 +178,9 @@ private:
 
 	void startRecording(float preroll, float duration);
 
+	/// Back to live mode on the device, after a take video, and playing.
+	void resumeLive(const std::string & deviceName);
+
 	void updateSizes();
 
 	bool radioButtonSetMode(const char* name, SetMode& mode, SetMode value);
@@ -246,6 +249,7 @@ private:
 	// What _audio was last opened on, so a settings change reopens it.
 	std::string _audioOpenedDevice;
 	int _audioOpenedChannel = 0;
+	double _audioRetryTime = 0.0;
 	int64_t _takeDropBase = 0;
 	int64_t _takeDropped = 0;
 	int64_t _takeJumpBase = 0;

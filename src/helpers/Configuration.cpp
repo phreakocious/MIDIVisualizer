@@ -166,6 +166,8 @@ Configuration::Configuration(const std::string& path, const std::vector<std::str
 					exporting.format = Export::Format::MPEG4;
 				} else if(vals[0] == "PRORES"){
 					exporting.format = Export::Format::PRORES;
+				} else if(vals[0] == "H264"){
+					exporting.format = Export::Format::H264;
 				}
 			}
 		}
@@ -323,7 +325,7 @@ void Configuration::printHelp(){
 
 	const std::vector<std::pair<std::string, std::string>> expOpts = {
 		{"export", "path to the output video (or directory for PNG)"},
-		{"format", "output format (values: PNG, MPEG2, MPEG4, PRORES)"},
+		{"format", "output format (values: PNG, MPEG2, MPEG4, PRORES, H264)"},
 		{"framerate", "number of frames per second to export (integer)"},
 		{"bitrate", "target video bitrate in Mb (integer)"},
 		{"postroll", "Postroll time after the track, in seconds (number, default 10.0)"},
