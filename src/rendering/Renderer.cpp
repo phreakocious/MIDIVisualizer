@@ -703,8 +703,8 @@ void Renderer::drawKeyboard3D(const std::shared_ptr<MIDIScene>& scene, float tim
 	for(int i = 0; i < 8; ++i){
 		const glm::vec4 corner((i & 1) ? aspect : -aspect, (i & 2) ? blackTop : slipBottom, (i & 4) ? slipFront : pivotZ, 1.0f);
 		const glm::vec3 p(lightView * corner);
-		lo = glm::min(lo, p);
-		hi = glm::max(hi, p);
+		lo = (glm::min)(lo, p);
+		hi = (glm::max)(hi, p);
 	}
 	const glm::mat4 lightMvp = glm::ortho(lo.x, hi.x, lo.y, hi.y, -hi.z, -lo.z) * lightView;
 	// Shadow lookups start this far off the surface, past the soft edge's reach, so a lit face does not shadow itself.
