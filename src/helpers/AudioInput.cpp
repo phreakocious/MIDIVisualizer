@@ -128,6 +128,7 @@ bool AudioInput::open(const std::string & deviceName, int firstChannel){
 	_rate = int(std::lround(rate));
 	_nextSample = -1.0;
 	_dropped = 0;
+	_lastBuffer = hostNow();
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
 		_peak = 0.0f;
@@ -179,6 +180,7 @@ void AudioInput::deliver(const float * interleaved, size_t frames, double sample
 	if(frames == 0){
 		return;
 	}
+	_lastBuffer = hostNow();
 	const double pts = double(AudioConvertHostTimeToNanos(hostTime)) * 1e-9;
 	// The sample count jumps when the queue loses audio: fill the hole so later samples keep their time.
 	const int64_t gap = _nextSample < 0.0 ? 0 : int64_t(std::llround(sampleTime - _nextSample));
@@ -241,6 +243,10 @@ float AudioInput::takeLevel(){
 
 int64_t AudioInput::droppedFrames() const {
 	return _dropped;
+}
+
+double AudioInput::lastBufferHost() const {
+	return _lastBuffer;
 }
 
 void AudioInput::setSink(std::function<void(double ptsHost, const float * stereo, size_t frames)> sink){

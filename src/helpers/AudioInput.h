@@ -45,6 +45,9 @@ public:
 	/// Frames the queue lost since open; the sink got silence in their place.
 	int64_t droppedFrames() const;
 
+	/// Host seconds when the last buffer arrived, or when the input opened, before the first one.
+	double lastBufferHost() const;
+
 	/// Called on the queue's thread with interleaved stereo; ptsHost is its first frame's host time.
 	/// Once setSink returns, the previous sink is never called again. Empty to remove.
 	/// The sink must not call back into this AudioInput.
@@ -59,6 +62,7 @@ private:
 	std::function<void(double, const float *, size_t)> _sink;
 	float _peak = 0.0f;
 	std::atomic<int64_t> _dropped{ 0 };
+	std::atomic<double> _lastBuffer{ 0.0 };
 	std::string _error;
 	int _rate = 0;
 	// Set before the queue starts; the queue's thread only reads them.

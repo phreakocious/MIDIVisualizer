@@ -1690,6 +1690,11 @@ void Viewer::startTake(float currentTime){
 }
 
 void Viewer::showTakeButtons(float currentTime){
+	// An unplugged or starved device sends nothing; a denied microphone sends silence, which the take reports at its end.
+	std::string inputProblem;
+	if(_audio.isOpen() && AudioInput::hostNow() - _audio.lastBufferHost() > 0.5){
+		inputProblem = "No sound is arriving from " + _audioOpenedDevice + ".";
+	}
 	const bool stopping = _take.isStopping();
 	if(_take.isRecording() && !stopping){
 		const int seconds = int(_take.elapsed(AudioInput::hostNow()));
@@ -1702,7 +1707,8 @@ void Viewer::showTakeButtons(float currentTime){
 	} else {
 		const char * reason = stopping ? "Writing the last take"
 			: _takes.audioDevice.empty() ? "Choose an audio input in Takes..."
-			: !_audio.isOpen() ? _audio.error().c_str() : nullptr;
+			: !_audio.isOpen() ? _audio.error().c_str()
+			: !inputProblem.empty() ? inputProblem.c_str() : nullptr;
 		if(takeButton("Record take###Take", reason, "Record the instrument's sound and MIDI to a new folder in Movies/MIDIVisualizer")){
 			startTake(currentTime);
 		}
@@ -1729,6 +1735,12 @@ void Viewer::showTakeButtons(float currentTime){
 	}
 	ImGui::helpTooltip("Audio input and video settings for takes");
 	showTakeSettings();
+	// As text, not only as the Record tooltip: a dead input must show before the take.
+	if(!inputProblem.empty()){
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+		ImGui::TextWrapped("%s", inputProblem.c_str());
+		ImGui::PopStyleColor();
+	}
 
 	const bool recording = _take.isRecording();
 	const char * replaces = "The take replaces the notes played so far, then the device reconnects.";

@@ -22,6 +22,7 @@ bool TakeRecorder::start(const std::string & folder, int rate, double t0Host, co
 	_timing = timing;
 	_clock = TakeClock(rate);
 	_midi.clear();
+	_peak = 0.0f;
 	_aligned = false;
 	_next = _end = 0;
 	_state = State::RECORDING;
@@ -56,7 +57,11 @@ void TakeRecorder::onAudio(double ptsHost, const float * stereo, size_t frames) 
 	const int64_t from = _wav.frames();
 	const int64_t to = std::min(_next, limit);
 	if(to > from) {
-		_wav.write(stereo + (from - first) * 2, size_t(to - from));
+		const float * written = stereo + (from - first) * 2;
+		_wav.write(written, size_t(to - from));
+		for(int64_t i = 0; i < 2 * (to - from); ++i) {
+			_peak = std::max(_peak, std::abs(written[i]));
+		}
 	}
 }
 
@@ -95,7 +100,7 @@ bool TakeRecorder::finish(double nowHost) {
 			return false;
 		}
 		if(!whole) {
-			_error = "The sound stopped before the end of the take.";
+			_error = _wav.frames() == 0 ? "No sound arrived during the take." : "The sound stopped before the end of the take.";
 		}
 		// From here onAudio leaves the WAV and the clock alone, so the files are written outside the lock.
 		_state = State::IDLE;
@@ -103,6 +108,10 @@ bool TakeRecorder::finish(double nowHost) {
 	}
 	if(!_wav.close() && _error.empty()) {
 		_error = "Could not write take.wav.";
+	}
+	// macOS records silence, with no error, when it denies the microphone; so does a wrong input or a loose cable.
+	if(_peak < 0.001f && _error.empty()) {
+		_error = "take.wav is silent: check the cable, First input, and System Settings > Privacy & Security > Microphone.";
 	}
 
 	std::stable_sort(midi.begin(), midi.end(), [](const libremidi::message & a, const libremidi::message & b) {

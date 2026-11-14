@@ -45,7 +45,7 @@ public:
 
 	const std::string & folder() const;
 
-	/// Empty when the take is whole.
+	/// Empty when the take is whole and has sound.
 	const std::string & error() const;
 
 private:
@@ -63,6 +63,7 @@ private:
 	std::string _folder;
 	std::string _error;
 	int _rate = 0;
+	float _peak = 0.0f; // Of what is written to take.wav.
 	double _t0 = 0.0;
 	double _t1 = 0.0;
 	bool _aligned = false;
