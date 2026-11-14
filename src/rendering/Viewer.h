@@ -134,6 +134,9 @@ private:
 
 	void showBackgroundOptions();
 
+	/// Why the buttons that open a dialog or replace the scene are greyed out; null when they are not.
+	const char * takeBusyReason() const;
+
 	void showBottomButtons();
 
 	void showLayers();

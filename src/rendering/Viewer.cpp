@@ -30,9 +30,9 @@ SystemAction::SystemAction(SystemAction::Type act) {
 	data = glm::ivec4(0);
 }
 
-#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
 namespace {
 
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
 	std::string takesFolder(){
 		const char * home = std::getenv("HOME");
 		return std::string(home ? home : "") + "/Movies/MIDIVisualizer";
@@ -48,6 +48,7 @@ namespace {
 		System::createDirectory(takesFolder());
 		return System::createDirectory(folder) ? folder : "";
 	}
+#endif
 
 	/// Greyed out, with the reason as its tooltip, when there is a reason.
 	bool takeButton(const char * label, const char * disabledReason, const char * help){
@@ -60,14 +61,13 @@ namespace {
 			if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
 				ImGui::SetTooltip("%s", disabledReason);
 			}
-		} else {
+		} else if(help){
 			ImGui::helpTooltip(help);
 		}
 		return pressed;
 	}
 
 }
-#endif
 
 Viewer::Viewer(const Configuration& config) :
 	_supportTransparency(!config.preventTransparency) {
@@ -518,7 +518,8 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 		ImGui::Separator();
 		
 		// Load button.
-		if(ImGui::Button("Load MIDI file...")) {
+		const char * takeBusy = takeBusyReason();
+		if(takeButton("Load MIDI file...", takeBusy, nullptr)) {
 			// Read arguments.
 			char* outPath = nullptr;
 			int res = sr_gui_ask_load_file("Load MIDI file", "", "mid", &outPath);
@@ -530,7 +531,7 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 		}
 		ImGuiSameLine(COLUMN_SIZE);
 		if(_liveplay){
-			if (ImGui::Button("Clear and stop session")) {
+			if (takeButton("Clear and stop session", takeBusy, nullptr)) {
 				_scene = std::make_shared<MIDIScene>();
 				_liveplay = false;
 				_shouldPlay = false;
@@ -551,7 +552,7 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 								|| (std::dynamic_pointer_cast<MIDISceneLive>(_scene) != nullptr);
 		if(existingScene)
 		{
-			if(ImGui::Button("Export MIDI file...")) {
+			if(takeButton("Export MIDI file...", takeBusy, "Export a new MIDI file of the current session")) {
 				char* savePath = nullptr;
 				int res = sr_gui_ask_save_file("Save MIDI file", "", "mid", &savePath);
 				System::forceLocale();
@@ -562,7 +563,6 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 				}
 				free(savePath);
 			}
-			ImGui::helpTooltip("Export a new MIDI file of the current session");
 		}
 
 		ImGui::Separator();
@@ -1473,18 +1473,27 @@ void Viewer::showBackgroundOptions(){
 
 }
 
+const char * Viewer::takeBusyReason() const {
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+	// A dialog stalls the frame loop that collects the take's MIDI, and a new scene would end the take.
+	return _take.isRecording() ? "Not available while a take records" : nullptr;
+#else
+	return nullptr;
+#endif
+}
+
 void Viewer::showBottomButtons(){
-	if(ImGui::Button("Export...")){
+	const char * takeBusy = takeBusyReason();
+	if(takeButton("Export...", takeBusy, "Export video recording")){
 		ImGui::OpenPopup("Export");
 	}
-	ImGui::helpTooltip("Export video recording");
 
 	if(_recorder.drawGUI(_guiScale)){
 		startRecording(_state.prerollTime, float(_scene->duration()));
 	}
 	ImGuiSameLine();
 
-	if (ImGui::Button("Save config...")) {
+	if (takeButton("Save config...", takeBusy, "Save the current settings for all effects")) {
 		// Read arguments.
 		char* savePath = nullptr;
 		int res = sr_gui_ask_save_file("Create config file", "", "ini", &savePath);
@@ -1494,10 +1503,9 @@ void Viewer::showBottomButtons(){
 		}
 		free(savePath);
 	}
-	ImGui::helpTooltip("Save the current settings for all effects");
 	ImGuiSameLine();
 
-	if (ImGui::Button("Load config...")) {
+	if (takeButton("Load config...", takeBusy, "Load effects settings from a configuration file")) {
 		// Read arguments.
 		char* outPath = nullptr;
 		int res = sr_gui_ask_load_file("Select config file", "", "ini", &outPath);
@@ -1509,7 +1517,6 @@ void Viewer::showBottomButtons(){
 		}
 		free(outPath);
 	}
-	ImGui::helpTooltip("Load effects settings from a configuration file");
 	ImGuiSameLine();
 
 	if (ImGui::Button("Reset##config")) {

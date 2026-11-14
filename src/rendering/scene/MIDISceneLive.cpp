@@ -440,7 +440,8 @@ int MIDISceneLive::_refreshIndex = 0;
 
 libremidi::midi_in & MIDISceneLive::shared(){
 	if(_sharedMIDIIn == nullptr){
-		_sharedMIDIIn = new libremidi::midi_in(libremidi::API::UNSPECIFIED, "MIDIVisualizer");
+		// Messages wait here until the frame loop polls them; at the default 100, a stalled frame drops a take's notes.
+		_sharedMIDIIn = new libremidi::midi_in(libremidi::API::UNSPECIFIED, "MIDIVisualizer", 4096);
 	}
 	return *_sharedMIDIIn;
 }
