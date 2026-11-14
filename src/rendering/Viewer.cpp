@@ -19,12 +19,55 @@
 #include "scene/MIDISceneLive.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <fstream>
+#include <thread>
 
 SystemAction::SystemAction(SystemAction::Type act) {
 	type = act;
 	data = glm::ivec4(0);
 }
+
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+namespace {
+
+	std::string takesFolder(){
+		const char * home = std::getenv("HOME");
+		return std::string(home ? home : "") + "/Movies/MIDIVisualizer";
+	}
+
+	/// Named after the local time; empty when it cannot be created.
+	std::string newTakeFolder(){
+		const std::time_t now = std::time(nullptr);
+		char name[32];
+		std::strftime(name, sizeof(name), "%Y-%m-%d %H-%M-%S", std::localtime(&now));
+		const std::string folder = takesFolder() + "/" + name;
+		// The parent usually exists; a take folder that exists holds another take, so it is never reused.
+		System::createDirectory(takesFolder());
+		return System::createDirectory(folder) ? folder : "";
+	}
+
+	/// Greyed out, with the reason as its tooltip, when there is a reason.
+	bool takeButton(const char * label, const char * disabledReason, const char * help){
+		if(disabledReason){
+			ImGui::BeginDisabled();
+		}
+		const bool pressed = ImGui::Button(label);
+		if(disabledReason){
+			ImGui::EndDisabled();
+			if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
+				ImGui::SetTooltip("%s", disabledReason);
+			}
+		} else {
+			ImGui::helpTooltip(help);
+		}
+		return pressed;
+	}
+
+}
+#endif
 
 Viewer::Viewer(const Configuration& config) :
 	_supportTransparency(!config.preventTransparency) {
@@ -130,7 +173,18 @@ Viewer::Viewer(const Configuration& config) :
 	_scene.reset(new MIDIScene());
 }
 
-Viewer::~Viewer() {}
+Viewer::~Viewer() {
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+	// Whatever the quit path, a take in progress is written before the input closes.
+	const double deadline = AudioInput::hostNow() + 1.5;
+	_take.requestStop(AudioInput::hostNow());
+	while(_take.isRecording() && !_take.finish(AudioInput::hostNow()) && AudioInput::hostNow() < deadline){
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+	_audio.setSink(nullptr);
+	_audio.close();
+#endif
+}
 
 bool Viewer::loadFile(const std::string& midiFilePath) {
 	std::shared_ptr<MIDIScene> scene(nullptr);
@@ -229,6 +283,10 @@ SystemAction Viewer::draw(float currentTime) {
 
 	// Render scene and blit, with GUI on top if needed.
 	drawScene(_useTransparency);
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+	// After the scene has passed this frame's MIDI on, so a stopping take has every message before its end.
+	updateTakes();
+#endif
 
 	glViewport(0, 0, GLsizei(_backbufferSize[0]), GLsizei(_backbufferSize[1]));
 	_passthrough.draw(_finalFramebuffer->textureId(), _timer);
@@ -477,6 +535,9 @@ SystemAction Viewer::drawGUI(const float currentTime) {
 				_timer = 0.0f;
 				applyAllSettings();
 			}
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+			showTakeButtons(currentTime);
+#endif
 		} else {
 			if (ImGui::Button("Connect to device...")) {
 				ImGui::OpenPopup("Devices");
@@ -1560,6 +1621,203 @@ void Viewer::showDevices(){
 	}
 }
 
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+void Viewer::updateTakes(){
+	if(_take.isRecording()){
+		const double now = AudioInput::hostNow();
+		_takeDropped = _audio.droppedFrames() - _takeDropBase;
+		// The session ended under the take.
+		if(!_liveplay){
+			_take.requestStop(now);
+		}
+		if(_take.finish(now)){
+			const auto liveScene = std::dynamic_pointer_cast<MIDISceneLive>(_scene);
+			if(liveScene){
+				liveScene->setMessageListener(nullptr);
+			}
+		}
+		// The input stays as it is until the take is written.
+		return;
+	}
+	if(!_liveplay || _takes.audioDevice.empty()){
+		_audio.setSink(nullptr);
+		_audio.close();
+		// The next session tries the device again.
+		_audioOpenedDevice.clear();
+		return;
+	}
+	if(_audioOpenedDevice == _takes.audioDevice && _audioOpenedChannel == _takes.audioFirstChannel){
+		return;
+	}
+	_audioOpenedDevice = _takes.audioDevice;
+	_audioOpenedChannel = _takes.audioFirstChannel;
+	_audio.setSink(nullptr);
+	if(_audio.open(_audioOpenedDevice, _audioOpenedChannel)){
+		_audio.setSink([this](double ptsHost, const float * stereo, size_t frames){
+			_take.onAudio(ptsHost, stereo, frames);
+		});
+	}
+}
+
+void Viewer::startTake(float currentTime){
+	const auto liveScene = std::dynamic_pointer_cast<MIDISceneLive>(_scene);
+	if(!liveScene){
+		return;
+	}
+	const std::string folder = newTakeFolder();
+	if(folder.empty()){
+		_takeError = "Could not create a new folder in " + takesFolder() + ".";
+		return;
+	}
+	_takeError.clear();
+	const glm::ivec2 signature = liveScene->signature();
+	const TakeTiming timing = { 60e6 / liveScene->tempoBPM(), signature[0], signature[1], _takes.audioOffsetMs / 1000.0 };
+	if(!_take.start(folder, _audio.rate(), AudioInput::hostNow(), timing)){
+		return;
+	}
+	_takeDropBase = _audio.droppedFrames();
+	_takeDropped = 0;
+	liveScene->setMessageListener([this](const libremidi::message & message){
+		_take.addMIDI(message);
+	});
+	// So the player sees the notes of the take.
+	if(!_shouldPlay){
+		_shouldPlay = true;
+		_timerStart = currentTime - _timer;
+	}
+}
+
+void Viewer::showTakeButtons(float currentTime){
+	const bool stopping = _take.isStopping();
+	if(_take.isRecording() && !stopping){
+		const int seconds = int(_take.elapsed(AudioInput::hostNow()));
+		char label[64];
+		snprintf(label, sizeof(label), "Stop take (%d:%02d)###Take", seconds / 60, seconds % 60);
+		if(ImGui::Button(label)){
+			_take.requestStop(AudioInput::hostNow());
+		}
+		ImGui::helpTooltip("End the take and write its files");
+	} else {
+		const char * reason = stopping ? "Writing the last take"
+			: _takes.audioDevice.empty() ? "Choose an audio input in Takes..."
+			: !_audio.isOpen() ? _audio.error().c_str() : nullptr;
+		if(takeButton("Record take###Take", reason, "Record the instrument's sound and MIDI to a new folder in Movies/MIDIVisualizer")){
+			startTake(currentTime);
+		}
+	}
+
+	ImGuiSameLine(COLUMN_SIZE);
+	const float level = _audio.takeLevel();
+	const double now = ImGui::GetTime();
+	if(level >= _levelPeak || now - _levelPeakTime > 1.0){
+		_levelPeak = level;
+		_levelPeakTime = now;
+	}
+	ImGui::ProgressBar(level, ImVec2(90.0f * _guiScale, 0.0f), "");
+	const ImVec2 barMin = ImGui::GetItemRectMin();
+	const ImVec2 barMax = ImGui::GetItemRectMax();
+	const float peakX = barMin.x + _levelPeak * (barMax.x - barMin.x);
+	ImGui::GetWindowDrawList()->AddLine(ImVec2(peakX, barMin.y), ImVec2(peakX, barMax.y), ImGui::GetColorU32(ImGuiCol_Text), 2.0f * _guiScale);
+	ImGui::helpTooltip("Level of the audio input; the line holds the peak for a second");
+
+	ImGuiSameLine();
+	if(ImGui::Button("Takes...")){
+		_audioDevices = AudioInput::devices();
+		ImGui::OpenPopup("Takes");
+	}
+	ImGui::helpTooltip("Audio input and video settings for takes");
+	showTakeSettings();
+
+	const bool recording = _take.isRecording();
+	const char * replaces = "The take replaces the notes played so far, then the device reconnects.";
+	const std::string latestHelp = std::string("Render the latest take to take.mp4 in its folder.\n") + replaces;
+	if(takeButton("Make video", recording ? "Stop the take first" : _take.folder().empty() ? "No take yet" : nullptr, latestHelp.c_str())){
+		_takeError = makeTakeVideo(_take.folder(), false) ? "" : "Could not make a video of " + _take.folder() + ".";
+	}
+	ImGuiSameLine(COLUMN_SIZE);
+	const std::string folderHelp = std::string("Render a take folder's take.mid and take.wav to take.mp4.\n") + replaces;
+	if(takeButton("Make video from take...", recording ? "Stop the take first" : nullptr, folderHelp.c_str())){
+		char * outPath = nullptr;
+		const int res = sr_gui_ask_directory("Choose a take folder", takesFolder().c_str(), &outPath);
+		System::forceLocale();
+		if(res == SR_GUI_VALIDATED && outPath){
+			const std::string folder(outPath);
+			_takeError = makeTakeVideo(folder, false) ? "" : "Could not make a video of " + folder + ".";
+		}
+		free(outPath);
+	}
+
+	const std::string & error = _takeError.empty() ? _take.error() : _takeError;
+	if(!error.empty()){
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+		ImGui::TextWrapped("%s", error.c_str());
+		ImGui::PopStyleColor();
+	}
+	if(_takeDropped > 0){
+		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 1.0f));
+		ImGui::TextWrapped("The audio input lost %lld frames: take.wav has silence there.", (long long)_takeDropped);
+		ImGui::PopStyleColor();
+	}
+}
+
+void Viewer::showTakeSettings(){
+	if(ImGui::BeginPopup("Takes")){
+		ImGuiPushItemWidth(180);
+		bool picked = false;
+		if(ImGui::BeginCombo("Audio input", _takes.audioDevice.empty() ? "None" : _takes.audioDevice.c_str())){
+			if(ImGui::Selectable("None", _takes.audioDevice.empty())){
+				_takes.audioDevice.clear();
+				picked = true;
+			}
+			for(const AudioInput::Device & device : _audioDevices){
+				if(ImGui::Selectable(device.name.c_str(), device.name == _takes.audioDevice)){
+					_takes.audioDevice = device.name;
+					picked = true;
+				}
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::helpTooltip("The device the instrument's sound comes in on");
+		// Picking the same device again retries it, say after it was plugged in.
+		if(picked){
+			_audioOpenedDevice.clear();
+		}
+
+		int channels = 0;
+		for(const AudioInput::Device & device : _audioDevices){
+			if(device.name == _takes.audioDevice){
+				channels = device.channels;
+			}
+		}
+		if(ImGui::InputInt("First input", &_takes.audioFirstChannel)){
+			_takes.audioFirstChannel = (std::max)(_takes.audioFirstChannel, 1);
+			if(channels > 0){
+				_takes.audioFirstChannel = (std::min)(_takes.audioFirstChannel, (std::max)(channels - 1, 1));
+			}
+		}
+		ImGui::helpTooltip("The first of the two inputs the instrument is plugged into");
+
+		ImGui::InputFloat("Audio offset", &_takes.audioOffsetMs, 1.0f, 10.0f, "%.1f ms");
+		ImGui::helpTooltip("Moves the notes later, as the instrument sounds a little after it sends MIDI");
+
+		if(ImGui::InputInt2("Video size", &_takes.videoSize[0])){
+			_takes.videoSize = glm::clamp(_takes.videoSize, 128, 16384);
+		}
+		ImGui::helpTooltip("Width and height of take videos");
+
+		if(ImGui::InputInt("Frame rate", &_takes.videoFramerate)){
+			_takes.videoFramerate = (std::max)(_takes.videoFramerate, 1);
+		}
+		ImGui::helpTooltip("Frames per second of take videos");
+		ImGui::PopItemWidth();
+
+		ImGui::Checkbox("Notes rise out of the keys", &_takes.notesRise);
+		ImGui::helpTooltip("In take videos, notes rise from the keys as in live mode, instead of falling onto them");
+		ImGui::EndPopup();
+	}
+}
+#endif
+
 void Viewer::showVisibility(){
 
 	if(ImGui::BeginPopup("Visibility options")){
@@ -2428,6 +2686,7 @@ void Viewer::updateConfiguration(Configuration& config){
 	if(liveScene){
 		config.lastMidiDevice = liveScene->deviceName();
 	}
+	config.takes = _takes;
 }
 
 bool Viewer::startDirectRecording(const Export& exporting, const glm::vec2 & size){

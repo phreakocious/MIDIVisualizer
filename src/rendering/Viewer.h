@@ -11,6 +11,10 @@
 #include "ScreenQuad.h"
 
 #include "../helpers/Recorder.h"
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+#include "../helpers/AudioInput.h"
+#include "../helpers/TakeRecorder.h"
+#endif
 
 #include "State.h"
 #include "Renderer.h"
@@ -136,6 +140,17 @@ private:
 
 	void showDevices();
 
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+	/// Keeps the audio input on the chosen device while live, and writes a stopping take.
+	void updateTakes();
+
+	void startTake(float currentTime);
+
+	void showTakeButtons(float currentTime);
+
+	void showTakeSettings();
+#endif
+
 	void showVisibility();
 
 	void showSets();
@@ -219,4 +234,18 @@ private:
 	bool _liveplay = false;
 	bool _useTransparency = false;
 	const bool _supportTransparency;
+#ifdef MIDIVIZ_SUPPORT_AUDIO_INPUT
+	// The input is declared after the take it feeds, so it stops first.
+	TakeRecorder _take;
+	AudioInput _audio;
+	std::vector<AudioInput::Device> _audioDevices;
+	// What _audio was last opened on, so a settings change reopens it.
+	std::string _audioOpenedDevice;
+	int _audioOpenedChannel = 0;
+	std::string _takeError;
+	int64_t _takeDropBase = 0;
+	int64_t _takeDropped = 0;
+	float _levelPeak = 0.0f;
+	double _levelPeakTime = 0.0;
+#endif
 };
