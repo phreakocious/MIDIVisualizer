@@ -93,6 +93,7 @@ private:
 	size_t _currentFrame = 0;
 	float _sceneDuration = 0.0f;
 	float _currentTime = 0.0f;
+	float _preroll = 0.0f;
 
 	std::string _audioPath;
 	std::ifstream _wav;

@@ -2476,6 +2476,10 @@ bool Viewer::makeTakeVideo(const std::string& folder, bool quitAfter){
 	_recorder.setAudio(wavPath);
 	startRecording(0.0f, float(frames) / float(rate));
 	if(!_recorder.isRecording()){
+		// Back to live mode, as the end of the export would do.
+		if(!quitAfter && !deviceName.empty()){
+			connectDevice(deviceName);
+		}
 		return false;
 	}
 	_exitAfterRecording = quitAfter;

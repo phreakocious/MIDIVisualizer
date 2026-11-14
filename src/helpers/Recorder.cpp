@@ -239,7 +239,8 @@ void Recorder::record(const std::shared_ptr<Framebuffer> & frame){
 		std::cout << "[EXPORT]: Export took " << (float(duration) / 1000.0f) << "s." << std::endl;
 	}
 
-	_currentTime += (1.0f / float(_config.framerate));
+	// From the index, not a running sum: float steps drift past a frame within minutes, while the pts stay exact.
+	_currentTime = float(double(_currentFrame + 1) / _config.framerate - _preroll);
 	++_currentFrame;
 }
 
@@ -355,6 +356,7 @@ bool Recorder::drawGUI(float scale){
 
 void Recorder::prepare(float preroll, float duration, float speed){
 	_currentTime = -preroll;
+	_preroll = preroll;
 	_framesCount = int(std::ceil((duration + _config.postroll + preroll) * _config.framerate / speed));
 	_currentFrame = _framesCount;
 	_sceneDuration = duration;
