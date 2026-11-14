@@ -42,8 +42,11 @@ public:
 	/// Peak of the pair since the last call, 0 to 1.
 	float takeLevel();
 
-	/// Frames the queue lost since open; the sink got silence in their place.
+	/// Frames the queue lost since open; the sink got silence in their place, except across a clock jump.
 	int64_t droppedFrames() const;
+
+	/// Holes since open that the sample count and host time disagree on, or longer than 2 s: left unfilled.
+	int64_t clockJumps() const;
 
 	/// Host seconds when the last buffer arrived, or when the input opened, before the first one.
 	double lastBufferHost() const;
@@ -62,6 +65,7 @@ private:
 	std::function<void(double, const float *, size_t)> _sink;
 	float _peak = 0.0f;
 	std::atomic<int64_t> _dropped{ 0 };
+	std::atomic<int64_t> _jumps{ 0 };
 	std::atomic<double> _lastBuffer{ 0.0 };
 	std::string _error;
 	int _rate = 0;
@@ -70,6 +74,7 @@ private:
 	int _first = 0;
 	// The queue's thread only.
 	double _nextSample = -1.0;
+	double _nextPts = 0.0;
 	std::vector<float> _stereo;
 };
 

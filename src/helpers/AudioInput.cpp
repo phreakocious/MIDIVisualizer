@@ -11,6 +11,13 @@
 // Enough queued audio to ride out a stalled sink (a slow WAV write, a long frame).
 static const int kBufferCount = 16;
 static const double kBufferSeconds = 0.020;
+// Lost audio is filled with silence only where the sample count and host time agree on the hole, and it is short:
+// anything else is a clock jump, where silence would misplace what follows.
+static const double kGapAgreementSeconds = 0.002;
+static const double kMaxFillSeconds = 2.0;
+// Silence goes out in chunks of this: nothing on the queue's thread grows with the gap.
+static const size_t kSilenceFrames = 1024;
+static const float kSilence[2 * kSilenceFrames] = {};
 
 struct InputDevice { AudioObjectID id; std::string name; int channels; };
 
@@ -128,6 +135,7 @@ bool AudioInput::open(const std::string & deviceName, int firstChannel){
 	_rate = int(std::lround(rate));
 	_nextSample = -1.0;
 	_dropped = 0;
+	_jumps = 0;
 	_lastBuffer = hostNow();
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
@@ -182,9 +190,22 @@ void AudioInput::deliver(const float * interleaved, size_t frames, double sample
 	}
 	_lastBuffer = hostNow();
 	const double pts = double(AudioConvertHostTimeToNanos(hostTime)) * 1e-9;
-	// The sample count jumps when the queue loses audio: fill the hole so later samples keep their time.
-	const int64_t gap = _nextSample < 0.0 ? 0 : int64_t(std::llround(sampleTime - _nextSample));
+	// Both clocks move on when the queue loses audio: fill the hole so later samples keep their time.
+	int64_t fill = 0;
+	if(_nextSample >= 0.0){
+		const int64_t sampleGap = std::llround(sampleTime - _nextSample);
+		const int64_t hostGap = std::llround((pts - _nextPts) * _rate);
+		const int64_t gap = std::min(sampleGap, hostGap);
+		if(std::llabs(sampleGap - hostGap) > std::llround(kGapAgreementSeconds * _rate) || gap > std::llround(kMaxFillSeconds * _rate)){
+			_dropped += std::max<int64_t>(std::max(sampleGap, hostGap), 0);
+			++_jumps;
+		} else if(gap > 0){
+			_dropped += gap;
+			fill = gap;
+		}
+	}
 	_nextSample = sampleTime + double(frames);
+	_nextPts = pts + double(frames) / _rate;
 
 	const size_t channels = size_t(_channels);
 	const float * pair = interleaved + (_first - 1);
@@ -198,14 +219,12 @@ void AudioInput::deliver(const float * interleaved, size_t frames, double sample
 
 	std::lock_guard<std::mutex> lock(_mutex);
 	_peak = std::max(_peak, peak);
-	if(gap > 0){
-		_dropped += gap;
-		if(_sink){
-			const std::vector<float> silence(size_t(gap) * 2, 0.0f);
-			_sink(pts - double(gap) / double(_rate), silence.data(), size_t(gap));
-		}
-	}
 	if(_sink){
+		for(int64_t left = fill; left > 0;){
+			const size_t chunk = size_t(std::min<int64_t>(left, kSilenceFrames));
+			_sink(pts - double(left) / double(_rate), kSilence, chunk);
+			left -= int64_t(chunk);
+		}
 		_sink(pts, _stereo.data(), frames);
 	}
 }
@@ -243,6 +262,10 @@ float AudioInput::takeLevel(){
 
 int64_t AudioInput::droppedFrames() const {
 	return _dropped;
+}
+
+int64_t AudioInput::clockJumps() const {
+	return _jumps;
 }
 
 double AudioInput::lastBufferHost() const {

@@ -248,6 +248,8 @@ private:
 	std::string _takeError;
 	int64_t _takeDropBase = 0;
 	int64_t _takeDropped = 0;
+	int64_t _takeJumpBase = 0;
+	int64_t _takeJumps = 0;
 	float _levelPeak = 0.0f;
 	double _levelPeakTime = 0.0;
 #endif

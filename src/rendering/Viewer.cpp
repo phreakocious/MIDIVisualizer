@@ -1635,6 +1635,7 @@ void Viewer::updateTakes(){
 	if(_take.isRecording()){
 		const double now = AudioInput::hostNow();
 		_takeDropped = _audio.droppedFrames() - _takeDropBase;
+		_takeJumps = _audio.clockJumps() - _takeJumpBase;
 		// The session ended under the take.
 		if(!_liveplay){
 			_take.requestStop(now);
@@ -1686,6 +1687,8 @@ void Viewer::startTake(float currentTime){
 	}
 	_takeDropBase = _audio.droppedFrames();
 	_takeDropped = 0;
+	_takeJumpBase = _audio.clockJumps();
+	_takeJumps = 0;
 	liveScene->setMessageListener([this](const libremidi::message & message){
 		_take.addMIDI(message);
 	});
@@ -1774,9 +1777,14 @@ void Viewer::showTakeButtons(float currentTime){
 		ImGui::TextWrapped("%s", error.c_str());
 		ImGui::PopStyleColor();
 	}
-	if(_takeDropped > 0){
+	if(_takeJumps > 0 || _takeDropped > 0){
 		ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.8f, 0.3f, 1.0f));
-		ImGui::TextWrapped("The audio input lost %lld frames: take.wav has silence there.", (long long)_takeDropped);
+		// A jump's lost frames count as dropped, but got no silence.
+		if(_takeJumps > 0){
+			ImGui::TextWrapped("The audio clock jumped during the take.");
+		} else {
+			ImGui::TextWrapped("The audio input lost %lld frames: take.wav has silence there.", (long long)_takeDropped);
+		}
 		ImGui::PopStyleColor();
 	}
 }
